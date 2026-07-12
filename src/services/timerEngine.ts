@@ -1,6 +1,7 @@
-import { TimerMode, TimerStatus, FocusSession } from '../types/timer.types';
+import { TimerMode, TimerStatus, FocusSession, SessionMode } from '../types/timer.types';
 import { useSettingsStore } from '../store/settingsStore';
 import { haptics } from '../utils/haptics';
+import { soundService } from './soundService';
 import { showCompletionNotification } from './notificationService';
 import { getLocalDateString, getISOWeekNumber, getDayName, getMonthName } from '../utils/dateUtils';
 import { computeActivitySummary, computeTodayStats } from './statisticsService';
@@ -14,6 +15,11 @@ export interface StoreProxy {
 export class TimerEngine {
   private store: StoreProxy | null = null;
   private timeoutId: NodeJS.Timeout | null = null;
+
+  constructor() {
+    // Pre-load sounds to prevent any delay on first playback
+    soundService.init();
+  }
 
   bindStore(store: StoreProxy) {
     this.store = store;
@@ -29,12 +35,7 @@ export class TimerEngine {
     }
   }
 
-  private getNextMode(currentMode: TimerMode, completedPomodoros: number): TimerMode {
-    if (currentMode === 'FOCUS') {
-      return 'BREAK';
-    }
-    return 'FOCUS';
-  }
+
 
   private generateSessionId(): string {
     return `session-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -78,42 +79,62 @@ export class TimerEngine {
     let newSession: FocusSession | null = null;
     let nextCompletedPomodoros = completedPomodoros;
 
+    const sessionId = this.generateSessionId();
+
+    if (sessionId !== lastCompletedSessionId) {
+      const now = new Date();
+      const durationSecs = this.getDurationForMode(mode);
+      const startTime = sessionStartTime
+        ? new Date(sessionStartTime)
+        : new Date(now.getTime() - durationSecs * 1000);
+
+      newSession = {
+        _id: sessionId,
+        user: 'local-user',
+        duration: Math.round(durationSecs / 60),
+        actualCompletedMinutes: Math.round(durationSecs / 60),
+        startTime: startTime.toISOString(),
+        endTime: now.toISOString(),
+        date: getLocalDateString(startTime),
+        day: getDayName(startTime),
+        week: getISOWeekNumber(startTime),
+        month: getMonthName(startTime),
+        year: startTime.getFullYear(),
+        mode: mode === 'LONG_BREAK' ? 'long break' : (mode.toLowerCase() as SessionMode),
+        completionStatus: 'completed',
+        interrupted: false,
+        task: null,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+    }
+
+    let nextMode: TimerMode = mode;
+    let autoStart = false;
+
     if (mode === 'FOCUS') {
+      // 1. Focus Completion
+      nextMode = 'BREAK';
+      autoStart = true;
+      soundService.play('break');
+    } else {
+      // 2. Break Completion
       nextCompletedPomodoros = completedPomodoros + 1;
-      const sessionId = this.generateSessionId();
-
-      if (sessionId !== lastCompletedSessionId) {
-        const now = new Date();
-        const durationSecs = this.getDurationForMode('FOCUS');
-        const startTime = sessionStartTime
-          ? new Date(sessionStartTime)
-          : new Date(now.getTime() - durationSecs * 1000);
-
-        newSession = {
-          _id: sessionId,
-          user: 'local-user',
-          duration: Math.round(durationSecs / 60),
-          actualCompletedMinutes: Math.round(durationSecs / 60),
-          startTime: startTime.toISOString(),
-          endTime: now.toISOString(),
-          date: getLocalDateString(startTime),
-          day: getDayName(startTime),
-          week: getISOWeekNumber(startTime),
-          month: getMonthName(startTime),
-          year: startTime.getFullYear(),
-          mode: 'focus',
-          completionStatus: 'completed',
-          interrupted: false,
-          task: null,
-          createdAt: now.toISOString(),
-          updatedAt: now.toISOString(),
-        };
+      
+      if (nextCompletedPomodoros < settings.cycles) {
+        nextMode = 'FOCUS';
+        autoStart = true;
+        soundService.play('cycle');
+      } else {
+        // Pomodoro Finished
+        nextMode = 'FOCUS';
+        nextCompletedPomodoros = 0;
+        autoStart = false;
+        soundService.play('completed');
       }
     }
 
-    const nextMode = this.getNextMode(mode, nextCompletedPomodoros);
     const nextDuration = this.getDurationForMode(nextMode);
-    const autoStart = mode === 'FOCUS' ? settings.autoStartBreaks : settings.autoStartTimers;
 
     if (newSession) {
       insertSession(newSession);
@@ -124,15 +145,15 @@ export class TimerEngine {
     const summary = computeActivitySummary(updatedSessions);
     const todayStats = computeTodayStats(updatedSessions);
 
-    const now = Date.now();
+    const nowTime = Date.now();
 
     this.store.set({
       mode: nextMode,
       status: autoStart ? 'running' : 'idle',
       remainingTime: nextDuration,
-      sessionStartTime: autoStart ? now : null,
+      sessionStartTime: autoStart ? nowTime : null,
       pauseTime: null,
-      targetEndTime: autoStart ? now + nextDuration * 1000 : null,
+      targetEndTime: autoStart ? nowTime + nextDuration * 1000 : null,
       completedPomodoros: nextCompletedPomodoros,
       sessions: updatedSessions,
       lastCompletedSessionId: newSession ? newSession._id : lastCompletedSessionId,
@@ -164,6 +185,7 @@ export class TimerEngine {
     });
 
     haptics.lightTap();
+    soundService.play('start');
     this.startTimeout(durationToUse * 1000);
   }
 
@@ -228,9 +250,24 @@ export class TimerEngine {
     if (!this.store) return;
     const { mode, completedPomodoros } = this.store.get();
     this.stopTimeout();
+    
+    const settings = useSettingsStore.getState().settings;
 
-    const nextPomodoros = mode === 'FOCUS' ? completedPomodoros + 1 : completedPomodoros;
-    const nextMode = this.getNextMode(mode, nextPomodoros);
+    let nextMode: TimerMode;
+    let nextPomodoros = completedPomodoros;
+
+    if (mode === 'FOCUS') {
+      nextMode = 'BREAK';
+    } else {
+      nextPomodoros = completedPomodoros + 1;
+      if (nextPomodoros < settings.cycles) {
+        nextMode = 'FOCUS';
+      } else {
+        nextMode = 'FOCUS';
+        nextPomodoros = 0;
+      }
+    }
+
     const nextDuration = this.getDurationForMode(nextMode);
 
     this.store.set({
