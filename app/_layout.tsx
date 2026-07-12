@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Stack, router } from 'expo-router';
 import { useFonts } from 'expo-font';
 import {
   Inter_400Regular,
@@ -13,12 +13,15 @@ import { StatusBar } from 'expo-status-bar';
 
 import { lightTheme, darkTheme, amoledTheme } from '@/src/theme';
 import { useSettingsStore } from '@/src/store/settingsStore';
+import { useAuthStore } from '@/src/store/authStore';
+import { initDB, getUser } from '@/src/services/db';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const { settings } = useSettingsStore();
+  const [isReady, setIsReady] = useState(false);
   
   const [loaded, error] = useFonts({
     Inter_400Regular,
@@ -29,11 +32,27 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (loaded || error) {
-      SplashScreen.hideAsync();
+      // 1. Initialize SQLite Database
+      initDB();
+
+      // 2. Hydrate Zustand stores with SQLite data
+      useSettingsStore.getState().hydrate();
+      useAuthStore.getState().hydrate();
+
+      // 3. Check if user exists for onboarding routing
+      const user = getUser();
+      
+      SplashScreen.hideAsync().then(() => {
+        setIsReady(true);
+        // Force replace to onboarding if no user
+        if (!user) {
+          router.replace('/onboarding');
+        }
+      });
     }
   }, [loaded, error]);
 
-  if (!loaded && !error) {
+  if (!isReady || (!loaded && !error)) {
     return null;
   }
 
@@ -46,6 +65,7 @@ export default function RootLayout() {
       <StatusBar style={settings.theme === 'light' ? 'dark' : 'light'} />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" options={{ title: 'Oops!' }} />
       </Stack>
     </PaperProvider>

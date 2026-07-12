@@ -4,16 +4,16 @@
 
 // ─── Timer Core ────────────────────────────────────────────────────────────────
 
-export type TimerMode = 'FOCUS' | 'SHORT_BREAK' | 'LONG_BREAK';
+export type TimerMode = 'FOCUS' | 'BREAK' | 'LONG_BREAK';
 export type TimerStatus = 'idle' | 'running' | 'paused';
-export type SessionMode = 'focus' | 'short break' | 'long break';
+export type SessionMode = 'focus' | 'break' | 'long break';
 export type CompletionStatus = 'completed' | 'interrupted' | 'skipped';
 
 // ─── Settings Limits ───────────────────────────────────────────────────────────
 
 export const SETTINGS_LIMITS = {
   focusTime: { min: 5, max: 120, step: 1, default: 25 },
-  shortBreakTime: { min: 1, max: 15, step: 1, default: 5 },
+  shortBreakTime: { min: 1, max: 30, step: 1, default: 5 },
   longBreakTime: { min: 5, max: 30, step: 1, default: 15 },
   cycles: { min: 1, max: 10, step: 1, default: 4 },
 } as const;

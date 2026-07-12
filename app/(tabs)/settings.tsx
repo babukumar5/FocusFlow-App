@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Linking, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
@@ -21,15 +21,21 @@ export default function SettingsScreen() {
   const handleUpdate = (updates: Partial<typeof settings>) => {
     updateSettings(updates);
     updateAuthSettings(updates);
-    
-    // Sync timer durations — setDurations only applies when timer is idle
-    if (updates.focusTime !== undefined || updates.shortBreakTime !== undefined || updates.longBreakTime !== undefined) {
-       setDurations(
-         updates.focusTime ?? settings.focusTime,
-         updates.shortBreakTime ?? settings.shortBreakTime,
-         updates.longBreakTime ?? settings.longBreakTime
-       );
-    }
+  };
+
+  const handleReset = () => {
+    Alert.alert(
+      "Reset Timer Settings?",
+      "This will restore the default timer settings.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Reset", 
+          style: "destructive",
+          onPress: () => handleUpdate({ focusTime: 25, shortBreakTime: 5, cycles: 2 })
+        }
+      ]
+    );
   };
 
   return (
@@ -40,14 +46,11 @@ export default function SettingsScreen() {
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
           
-          <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
-            <View>
-              <Text style={styles.title}>Settings</Text>
-              <Text style={styles.subtitle}>Customize your FocusFlow experience.</Text>
+          <Animated.View entering={FadeIn.duration(600)} style={[styles.header, { justifyContent: 'center' }]}>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={[styles.title, { textAlign: 'center' }]}>Settings</Text>
+              <Text style={[styles.subtitle, { textAlign: 'center' }]}>Customize your FocusFlow experience.</Text>
             </View>
-            <TouchableOpacity style={styles.settingsButton}>
-              <MaterialCommunityIcons name="cog-outline" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
           </Animated.View>
 
           <Animated.Text entering={FadeInUp.delay(100).springify()} style={[styles.sectionTitle, { marginTop: 16 }]}>
@@ -70,10 +73,10 @@ export default function SettingsScreen() {
           <Animated.View entering={FadeInUp.delay(200).springify()}>
             <SliderCard
               icon="coffee-outline"
-              title="Short Break"
+              title="Break"
               value={settings.shortBreakTime}
               min={1}
-              max={15}
+              max={30}
               step={1}
               unit="m"
               onValueChange={(val) => handleUpdate({ shortBreakTime: val })}
@@ -81,19 +84,6 @@ export default function SettingsScreen() {
           </Animated.View>
 
           <Animated.View entering={FadeInUp.delay(250).springify()}>
-            <SliderCard
-              icon="cup-outline"
-              title="Long Break"
-              value={settings.longBreakTime}
-              min={5}
-              max={30}
-              step={1}
-              unit="m"
-              onValueChange={(val) => handleUpdate({ longBreakTime: val })}
-            />
-          </Animated.View>
-
-          <Animated.View entering={FadeInUp.delay(300).springify()}>
             <SliderCard
               icon="refresh"
               title="Cycles"
@@ -106,21 +96,30 @@ export default function SettingsScreen() {
             />
           </Animated.View>
 
-          <Animated.Text entering={FadeInUp.delay(350).springify()} style={styles.sectionTitle}>
-            Preferences
-          </Animated.Text>
-
-          <Animated.View entering={FadeInUp.delay(400).springify()}>
+          <Animated.View entering={FadeInUp.delay(350).springify()}>
             <SettingCard
-              icon="bell-ring-outline"
-              title="Timer Sound"
+              icon="play-circle-outline"
+              title="Auto Start Focus"
               isSwitch
-              switchValue={settings.timerSoundEnabled}
-              onSwitchChange={(val) => handleUpdate({ timerSoundEnabled: val })}
+              switchValue={settings.autoStartTimers}
+              onSwitchChange={(val) => handleUpdate({ autoStartTimers: val })}
             />
           </Animated.View>
 
-          <Animated.View entering={FadeInUp.delay(450).springify()}>
+          <Animated.View entering={FadeInUp.delay(400).springify()}>
+            <SettingCard
+              icon="refresh"
+              title="Reset Timer"
+              hideArrow={true}
+              onPress={handleReset}
+            />
+          </Animated.View>
+
+          <Animated.Text entering={FadeInUp.delay(450).springify()} style={styles.sectionTitle}>
+            Preferences
+          </Animated.Text>
+
+          <Animated.View entering={FadeInUp.delay(500).springify()}>
             <SettingCard
               icon="bell-outline"
               title="Notifications"
@@ -130,7 +129,7 @@ export default function SettingsScreen() {
             />
           </Animated.View>
 
-          <Animated.View entering={FadeInUp.delay(500).springify()}>
+          <Animated.View entering={FadeInUp.delay(550).springify()}>
             <SettingCard
               icon="brightness-4"
               title="AMOLED Mode"
@@ -140,22 +139,18 @@ export default function SettingsScreen() {
             />
           </Animated.View>
 
-          <Animated.Text entering={FadeInUp.delay(550).springify()} style={styles.sectionTitle}>
-            Connect & Support
-          </Animated.Text>
-          
           <Animated.View entering={FadeInUp.delay(600).springify()}>
             <SettingCard
-              icon="email-outline"
-              title="Contact Us"
-              onPress={() => Linking.openURL('mailto:support@focusflow.com').catch(() => {})}
+              icon="help-circle-outline"
+              title="How to Use"
+              onPress={() => {}}
             />
           </Animated.View>
 
           <Animated.View entering={FadeInUp.delay(650).springify()}>
             <SettingCard
-              icon="help-circle-outline"
-              title="What is Pomodoro?"
+              icon="email-outline"
+              title="Write Us"
               onPress={() => {}}
             />
           </Animated.View>
@@ -163,15 +158,7 @@ export default function SettingsScreen() {
           <Animated.View entering={FadeInUp.delay(700).springify()}>
             <SettingCard
               icon="star-outline"
-              title="Rate This App"
-              onPress={() => {}}
-            />
-          </Animated.View>
-
-          <Animated.View entering={FadeInUp.delay(750).springify()}>
-            <SettingCard
-              icon="share-variant-outline"
-              title="Share App"
+              title="Rate Us"
               onPress={() => {}}
             />
           </Animated.View>
@@ -224,21 +211,6 @@ const styles = StyleSheet.create({
     color: '#A8C7FF',
     lineHeight: 22,
     fontFamily: 'System',
-  },
-  settingsButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(30, 144, 255, 0.1)', // Very subtle glass button
-    borderWidth: 1,
-    borderColor: 'rgba(90, 170, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: PRIMARY_BLUE,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15, // Reduced glow
-    shadowRadius: 6,
-    elevation: 2,
   },
   sectionTitle: {
     fontSize: 15,

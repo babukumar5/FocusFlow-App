@@ -1,14 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import {
+  StyleSheet,
   View,
   Text,
-  StyleSheet,
-  TouchableOpacity,
+  SafeAreaView,
   Dimensions,
-  Platform,
+  TouchableOpacity,
   AppState,
+  TextInput,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
@@ -20,37 +20,51 @@ import Animated, {
   withRepeat,
   withSequence,
   Easing,
+  useFrameCallback,
 } from 'react-native-reanimated';
 import { useTimerStore } from '@/src/store/timerStore';
+import { useSettingsStore } from '@/src/store/settingsStore';
 import { useShallow } from 'zustand/react/shallow';
 import { formatTime } from '@/src/utils/formatTime';
 import { haptics } from '@/src/utils/haptics';
 
 const { width } = Dimensions.get('window');
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
 export default function TimerHomeScreen() {
+  const { settings } = useSettingsStore();
+
   const {
+    mode,
     status,
     remainingTime,
-    totalDuration,
+    targetEndTime,
     start,
     pause,
     resume,
     reset,
+    switchMode,
     syncBackgroundTime,
   } = useTimerStore(
     useShallow((state) => ({
+      mode: state.mode,
       status: state.status,
       remainingTime: state.remainingTime,
-      totalDuration: state.totalDuration,
+      targetEndTime: state.targetEndTime,
       start: state.start,
       pause: state.pause,
       resume: state.resume,
       reset: state.reset,
+      switchMode: state.switchMode,
       syncBackgroundTime: state.syncBackgroundTime,
     }))
   );
+
+  // Single Source of Truth for total duration
+  const totalDuration = mode === 'FOCUS' 
+    ? settings.focusTime * 60 
+    : (mode === 'BREAK' ? settings.shortBreakTime * 60 : settings.longBreakTime * 60);
 
   useEffect(() => {
     const handleAppStateChange = (nextState: string) => {
@@ -72,12 +86,16 @@ export default function TimerHomeScreen() {
   const progressVal = useSharedValue(remainingTime / totalDuration);
   const glowVal = useSharedValue(0.1);
 
-  useEffect(() => {
-    progressVal.value = withTiming(remainingTime / totalDuration, {
-      duration: 1000,
-      easing: Easing.linear,
-    });
-  }, [remainingTime, totalDuration]);
+  // Flawless high-performance timestamp-based native UI rendering
+  useFrameCallback(() => {
+    if (status === 'running' && targetEndTime) {
+      const now = Date.now();
+      const remainingMs = Math.max(0, targetEndTime - now);
+      progressVal.value = remainingMs / (totalDuration * 1000);
+    } else {
+      progressVal.value = remainingTime / totalDuration;
+    }
+  });
 
   useEffect(() => {
     glowVal.value = withRepeat(
@@ -107,6 +125,19 @@ export default function TimerHomeScreen() {
       opacity: glowVal.value,
       transform: [{ scale: withTiming(scaleFactor, { duration: 500 }) }],
     };
+  });
+
+  const animatedTextProps = useAnimatedProps(() => {
+    // Derive the remaining seconds directly from the smoothly animating progress value.
+    // This perfectly insulates the text rendering from JS thread skips/batching.
+    const currentRemaining = Math.ceil(progressVal.value * totalDuration);
+    const m = Math.floor(currentRemaining / 60);
+    const s = currentRemaining % 60;
+    const text = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return {
+      text: text,
+      defaultValue: text,
+    } as any;
   });
 
   return (
@@ -168,11 +199,28 @@ export default function TimerHomeScreen() {
             </Svg>
 
             <View style={styles.timeDisplayOverlay}>
-              <Text style={styles.countdownNumber}>
-                {formatTime(remainingTime)}
-              </Text>
+              <AnimatedTextInput
+                editable={false}
+                animatedProps={animatedTextProps}
+                style={[styles.countdownNumber, { padding: 0, margin: 0 }]}
+              />
             </View>
           </View>
+
+          {/* Mode Selector */}
+          <TouchableOpacity 
+            style={styles.modeSelector}
+            onPress={() => switchMode(mode === 'FOCUS' ? 'BREAK' : 'FOCUS')}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons name="chevron-down" size={20} color="#FFFFFF" />
+            <Text style={styles.modeSelectorText}>
+              {mode === 'FOCUS' ? 'POMODORO' : 'BREAK'}{' '}
+              <Text style={styles.modeDurationText}>
+                {mode === 'FOCUS' ? settings.focusTime : settings.shortBreakTime} MIN
+              </Text>
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Bottom Controls */}
@@ -304,5 +352,22 @@ const styles = StyleSheet.create({
   btnInner: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  modeSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 40,
+    backgroundColor: 'transparent',
+  },
+  modeSelectorText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 1,
+    marginLeft: 4,
+  },
+  modeDurationText: {
+    color: '#87CEFA',
   },
 });

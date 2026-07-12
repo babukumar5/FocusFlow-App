@@ -1,93 +1,82 @@
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AuthState, User, LoginPayload, SignupPayload, UpdateProfilePayload } from '../types/auth.types';
-import { useSettingsStore } from './settingsStore';
+/**
+ * FocusFlow — Auth Store
+ *
+ * Manages user identity (name, email, avatar, streak).
+ *
+ * Architecture notes:
+ * ─────────────────────────────────────────────────────────────────────────────
+ * • Settings are NO LONGER stored or persisted here. All reads/writes go
+ *   through settingsStore. This eliminates the dual-AsyncStorage-key conflict
+ *   where focusflow-auth and focusflow-settings could hold diverging copies
+ *   of the same setting values.
+ *
+ * • user.settings in the User type still exists (for API compatibility) but
+ *   it is populated at read-time from settingsStore, not persisted here.
+ *
+ * • MOCK_USER uses defaultSettings from settingsStore so there is exactly one
+ *   definition of the initial values.
+ *
+ * • updateSettings() is a thin delegation to settingsStore.updateSettings().
+ *   The timer's subscription to settingsStore handles the rest automatically.
+ *
+ * • onRehydrateStorage uses useAuthStore.setState() — not direct object
+ *   mutation — to correctly trigger Zustand's reactive update cycle.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
 
-const MOCK_USER: User = {
-  _id: 'mock-user-id',
-  name: 'Achiever',
-  email: 'achiever@focusflow.com',
-  avatar: '🧘',
-  settings: {
-    focusTime: 25,
-    shortBreakTime: 5,
-    longBreakTime: 15,
-    theme: 'dark',
-    soundType: 'digital_watch',
-    soundVolume: 0.8,
-    browserNotifications: true,
-    autoStartBreaks: false,
-    autoStartTimers: false,
-    hasCompletedOnboarding: true,
-    cycles: 4,
-    timerSoundEnabled: true,
-    backgroundMusic: 'None',
-    language: 'English',
-    notifications: true,
-  },
-  streak: {
-    currentStreak: 12,
-    longestStreak: 15,
-    lastActiveDate: new Date().toISOString().split('T')[0],
-  },
-  token: 'mock-jwt-token-12345',
-};
+import { create } from "zustand";
+import { AuthState, UpdateProfilePayload, User } from "../types/auth.types";
+import { useSettingsStore } from "./settingsStore";
+import { defaultSettings } from "../constants/defaultSettings";
+import { getUser as getDBUser } from "../services/db";
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set, get) => ({
-      user: MOCK_USER,
-      isAuthenticated: true,
-      isLoading: false,
-      isHydrated: false,
+// ─── Store ────────────────────────────────────────────────────────────────────
 
-
-      updateProfile: async (payload: UpdateProfilePayload) => {
-        const currentUser = get().user;
-        if (!currentUser) return;
-
-        set({ isLoading: true });
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        const updatedUser: User = {
-          ...currentUser,
-          name: payload.name ?? currentUser.name,
-          email: payload.email ?? currentUser.email,
-          avatar: payload.avatar ?? currentUser.avatar,
-        };
-        set({ user: updatedUser, isLoading: false });
+export const useAuthStore = create<AuthState>((set, get) => {
+  const initUser = (): User | null => {
+    const dbUser = getDBUser();
+    if (!dbUser) return null;
+    return {
+      _id: String(dbUser.id),
+      name: dbUser.username,
+      email: `${dbUser.username.toLowerCase()}@focusflow.com`,
+      avatar: "🧘",
+      settings: defaultSettings,
+      streak: {
+        currentStreak: 0,
+        longestStreak: 0,
+        lastActiveDate: new Date().toISOString().split("T")[0],
       },
+      token: "offline-token",
+    };
+  };
 
-      updateSettings: async (payload: Partial<typeof MOCK_USER.settings>) => {
-        const currentUser = get().user;
-        if (!currentUser) return;
+  return {
+    user: initUser(),
+    isAuthenticated: !!getDBUser(),
+    isLoading: false,
+    isHydrated: true,
 
-        // Sync with settings store first
-        useSettingsStore.getState().updateSettings(payload);
+    updateProfile: async (payload: UpdateProfilePayload) => {
+      const currentUser = get().user;
+      if (!currentUser) return;
+      
+      const updatedUser: User = {
+        ...currentUser,
+        name: payload.name ?? currentUser.name,
+        email: payload.email ?? currentUser.email,
+        avatar: payload.avatar ?? currentUser.avatar,
+      };
+      set({ user: updatedUser });
+    },
 
-        const updatedSettings = { ...currentUser.settings, ...payload };
-        
-        set({
-          user: {
-            ...currentUser,
-            settings: updatedSettings,
-          },
-        });
-      },
+    updateSettings: async (payload: Partial<typeof defaultSettings>) => {
+      useSettingsStore.getState().updateSettings(payload);
+    },
 
-      hydrate: async () => {
-        set({ isHydrated: true });
-      },
-    }),
-    {
-      name: 'focusflow-auth',
-      storage: createJSONStorage(() => AsyncStorage),
-      onRehydrateStorage: () => (state) => {
-        if (state) {
-          state.hydrate();
-        }
-      },
-    }
-  )
-);
+    hydrate: async () => {
+      const u = initUser();
+      set({ user: u, isAuthenticated: !!u, isHydrated: true });
+    },
+  };
+});

@@ -165,9 +165,6 @@ export default function ActivityScreen() {
               <Text style={styles.title}>Activity</Text>
               <Text style={styles.subtitle}>See your productivity and focus statistics.</Text>
             </View>
-            <TouchableOpacity style={styles.settingsButton}>
-              <MaterialCommunityIcons name="cog" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
           </View>
 
         {/* Segmented Control */}
@@ -294,19 +291,6 @@ export default function ActivityScreen() {
 const styles = StyleSheet.create({
   gradientBg: {
     flex: 1,
-  },
-  settingsButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#1E90FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#1E90FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
   },
   safeArea: {
     flex: 1,
