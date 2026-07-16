@@ -6,156 +6,174 @@ import {
   TouchableOpacity,
   ScrollView,
   Dimensions,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import Svg, { Path, Defs, LinearGradient, Stop, Circle, Line, Text as SvgText } from 'react-native-svg';
 import Animated, {
   useSharedValue,
-  useAnimatedProps,
+  useAnimatedStyle,
   withTiming,
+  withDelay,
   Easing,
 } from 'react-native-reanimated';
-import { useTimerStore } from '@/src/store/timerStore';
-import { computeTodayGraphData, computeWeekGraphData, computeYearGraphData } from '@/src/services/statisticsService';
+import { useActivityStore } from '@/src/store/activityStore';
 
 const { width } = Dimensions.get('window');
 const CHART_WIDTH = width - 48; // padding 24 on each side
-const CHART_HEIGHT = 290;
+const CHART_HEIGHT = 320;
 const PRIMARY_BLUE = '#1E90FF';
+const LIGHT_BLUE = '#A8C7FF';
+const HIGHLIGHT_BLUE = '#4da6ff';
 
-// Animated Path for Chart
-const AnimatedPath = Animated.createAnimatedComponent(Path);
-
-// Helper to generate a smooth bezier curve path from data points
-const generateSmoothPath = (points: {x: number, y: number}[]) => {
-  'worklet';
-  if (points.length === 0) return '';
-  if (points.length === 1) return `M ${points[0].x},${points[0].y}`;
-  
-  let d = `M ${points[0].x},${points[0].y}`;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[i];
-    const p1 = points[i + 1];
-    const midX = (p0.x + p1.x) / 2;
-    d += ` C ${midX},${p0.y} ${midX},${p1.y} ${p1.x},${p1.y}`;
-  }
-  return d;
-};
-
-export default function ActivityScreen() {
-  const [activeTab, setActiveTab] = useState<'Today' | 'Week' | 'Year'>('Today');
-  const { sessions, totalFocusTime: totalTime, totalSessions, avgSessionDuration: avgSession, bestDayTime } = useTimerStore();
-
-  const focusSessions = useMemo(() => sessions.filter(s => s.mode === 'focus'), [sessions]);
-
-  // Chart Data Generation based on activeTab
-  const chartData = useMemo(() => {
-    let labels: string[] = [];
-    let rawData: number[] = [];
-
-    if (activeTab === 'Today') {
-      const data = computeTodayGraphData(sessions);
-      labels = data.labels;
-      rawData = data.values;
-    } else if (activeTab === 'Week') {
-      const data = computeWeekGraphData(sessions);
-      labels = data.labels;
-      rawData = data.values;
-    } else {
-      const data = computeYearGraphData(sessions);
-      labels = data.labels;
-      rawData = data.values;
-    }
-
-    const maxVal = Math.max(...rawData, 1);
-    const paddingX = 40;
-    const paddingY = 20;
-    const usableWidth = CHART_WIDTH - paddingX * 2;
-    const usableHeight = CHART_HEIGHT - paddingY * 2;
-
-    const points = rawData.map((val, idx) => ({
-      x: paddingX + (idx / (rawData.length - 1)) * usableWidth,
-      y: paddingY + usableHeight - (val / maxVal) * usableHeight,
-      val
-    }));
-
-    const path = generateSmoothPath(points);
-    const areaPath = `${path} L ${points[points.length - 1].x},${CHART_HEIGHT} L ${points[0].x},${CHART_HEIGHT} Z`;
-    
-    // Find highest point for indicator
-    let highestPoint = points[0];
-    points.forEach(p => {
-      if (p.y < highestPoint.y) highestPoint = p;
-    });
-
-    return { points, path, areaPath, labels, highestPoint };
-  }, [activeTab, focusSessions]);
-
-  // Animation state for path
-  const pathAnim = useSharedValue(0);
-  const currentPoints = useSharedValue(chartData.points);
-  const prevPoints = useSharedValue(chartData.points);
+// --- Bar Component ---
+const AnimatedBar = React.memo(({ 
+  value, 
+  maxValue, 
+  label, 
+  index, 
+  isHighlighted,
+  isYear
+}: { 
+  value: number; 
+  maxValue: number; 
+  label: string; 
+  index: number;
+  isHighlighted: boolean;
+  isYear: boolean;
+}) => {
+  const heightAnim = useSharedValue(0);
 
   useEffect(() => {
-    prevPoints.value = currentPoints.value;
-    currentPoints.value = chartData.points;
-    pathAnim.value = 0;
-    pathAnim.value = withTiming(1, { duration: 500, easing: Easing.inOut(Easing.ease) });
-  }, [chartData.points]);
+    heightAnim.value = 0;
+    const targetHeight = maxValue > 0 ? (value / maxValue) * CHART_HEIGHT : 0;
+    heightAnim.value = withDelay(index * 50, withTiming(targetHeight, { duration: 600, easing: Easing.out(Easing.exp) }));
+  }, [value, maxValue, index]);
 
-  const animatedLineProps = useAnimatedProps(() => {
-    const progress = pathAnim.value;
-    const cPoints = currentPoints.value;
-    const pPoints = prevPoints.value;
+  const animatedStyle = useAnimatedStyle(() => ({
+    height: heightAnim.value,
+  }));
 
-    const interpPoints = [];
-    const maxLen = Math.max(pPoints.length, cPoints.length);
-    for (let i = 0; i < maxLen; i++) {
-      const p1 = pPoints[Math.min(i, pPoints.length - 1)];
-      const p2 = cPoints[Math.min(i, cPoints.length - 1)];
-      interpPoints.push({
-        x: p1.x + (p2.x - p1.x) * progress,
-        y: p1.y + (p2.y - p1.y) * progress,
-      });
+  const textAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -heightAnim.value - 8 }],
+  }));
+
+  const formatBarValue = (val: number) => {
+    if (val === 0) return '';
+    const h = Math.floor(val / 60);
+    const m = val % 60;
+    
+    if (isYear) {
+      if (h === 0) return `${m}m`;
+      if (m === 0) return `${h}h`;
+      return `${h}h\n${m}m`; // Multiline for year graph
     }
 
-    return {
-      d: generateSmoothPath(interpPoints),
-    };
-  });
+    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m}m`;
+  };
 
-  const animatedAreaProps = useAnimatedProps(() => {
-    const progress = pathAnim.value;
-    const cPoints = currentPoints.value;
-    const pPoints = prevPoints.value;
-
-    const interpPoints = [];
-    const maxLen = Math.max(pPoints.length, cPoints.length);
-    for (let i = 0; i < maxLen; i++) {
-      const p1 = pPoints[Math.min(i, pPoints.length - 1)];
-      const p2 = cPoints[Math.min(i, cPoints.length - 1)];
-      interpPoints.push({
-        x: p1.x + (p2.x - p1.x) * progress,
-        y: p1.y + (p2.y - p1.y) * progress,
-      });
-    }
-
-    const path = generateSmoothPath(interpPoints);
-    if (interpPoints.length === 0) return { d: '' };
-    const lastPoint = interpPoints[interpPoints.length - 1];
-    const firstPoint = interpPoints[0];
-    const areaPath = `${path} L ${lastPoint.x},${CHART_HEIGHT} L ${firstPoint.x},${CHART_HEIGHT} Z`;
-
-    return {
-      d: areaPath,
-    };
-  });
+  const barWidth = isYear ? 10 : 20;
+  const highlightedBarWidth = isYear ? 12 : 24;
 
   return (
-    <ExpoLinearGradient colors={['#020B2E', '#0A2F73']} style={styles.gradientBg}>
+    <View style={styles.barColumn}>
+      <View style={styles.barTouchable}>
+        <View style={[styles.barBackground, { width: highlightedBarWidth }]}>
+          <Animated.View style={[
+            styles.barFill,
+            { width: barWidth },
+            animatedStyle,
+            isHighlighted && [styles.barFillHighlighted, { width: highlightedBarWidth }]
+          ]}>
+            <ExpoLinearGradient
+              colors={[isHighlighted ? HIGHLIGHT_BLUE : PRIMARY_BLUE, 'transparent']}
+              style={styles.barGradient}
+            />
+          </Animated.View>
+        </View>
+
+        {value > 0 && (
+          <Animated.View style={[styles.floatingTextContainer, textAnimatedStyle]} pointerEvents="none">
+            <Text style={styles.barValueText}>{formatBarValue(value)}</Text>
+          </Animated.View>
+        )}
+      </View>
+
+      <View style={styles.barLabelContainer}>
+        {label.split('\n').map((line, i) => (
+          <Text key={i} style={[
+            styles.barLabelText,
+            isHighlighted && styles.barLabelTextHighlighted
+          ]}>{line}</Text>
+        ))}
+      </View>
+    </View>
+  );
+});
+
+export default function ActivityScreen() {
+  const [activeTab, setActiveTab] = useState<'Week' | 'Year'>('Week');
+  
+  const { summary, graphs } = useActivityStore();
+
+  const activeSummary = activeTab === 'Week' ? summary.week : summary.year;
+  const graphData = activeTab === 'Week' ? graphs.week : graphs.year;
+
+  // Segmented Control Animation
+  const tabPosition = useSharedValue(0);
+  useEffect(() => {
+    tabPosition.value = withTiming(activeTab === 'Week' ? 0 : 1, {
+      duration: 300,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [activeTab]);
+
+  const tabIndicatorStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: tabPosition.value * ((width - 48 - 12) / 2) }],
+    };
+  });
+
+  // Max value calculation for Y-axis
+  const maxValue = useMemo(() => {
+    const max = Math.max(...graphData.values, 0);
+    if (max === 0) return 60; // default to 60m if empty
+    // Round up to nearest nice number
+    if (max <= 60) return 60;
+    if (max <= 120) return 120;
+    const hours = Math.ceil(max / 60);
+    return hours * 60;
+  }, [graphData.values]);
+
+  const yAxisLabels = useMemo(() => {
+    const labels = [];
+    const steps = 4;
+    for (let i = steps; i >= 0; i--) {
+      const val = (maxValue / steps) * i;
+      const h = Math.floor(val / 60);
+      const m = val % 60;
+      if (maxValue >= 120) {
+         // Show hours if max is large
+         labels.push(h > 0 ? `${h}h` : '0h');
+      } else {
+         // Show minutes
+         labels.push(m > 0 ? `${m}m` : (h > 0 ? `${h * 60}m` : '0m'));
+      }
+    }
+    return labels;
+  }, [maxValue]);
+
+  const hasSessions = graphData.values.some(v => v > 0);
+
+  // Check current day/month for bold text, but no badges
+  const now = new Date();
+  const currentMonthIndex = now.getMonth();
+  const currentDayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1; // 0-6 for Mon-Sun
+
+  return (
+    <View style={styles.mainContainer}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
           
@@ -163,149 +181,132 @@ export default function ActivityScreen() {
           <View style={styles.header}>
             <View>
               <Text style={styles.title}>Activity</Text>
-              <Text style={styles.subtitle}>See your productivity and focus statistics.</Text>
+              <Text style={styles.subtitle}>See your productivity and focus</Text>
             </View>
           </View>
 
-        {/* Segmented Control */}
-        <View style={styles.segmentContainer}>
-          {['Today', 'Week', 'Year'].map((tab) => {
-            const isActive = activeTab === tab;
-            return (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.segmentTab, isActive && styles.segmentTabActive]}
-                onPress={() => setActiveTab(tab as any)}
-              >
-                <Text style={[styles.segmentText, isActive && styles.segmentTextActive]}>
-                  {tab}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Chart Area */}
-        <View style={styles.chartContainer}>
-          <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
-            <Defs>
-              <LinearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0" stopColor={PRIMARY_BLUE} stopOpacity="0.3" />
-                <Stop offset="1" stopColor={PRIMARY_BLUE} stopOpacity="0.0" />
-              </LinearGradient>
-            </Defs>
-
-            {/* Grid Lines & Y Labels */}
-            {[0, 1, 2, 3, 4].map((i) => {
-              const y = 20 + (i * (CHART_HEIGHT - 40)) / 4;
-              const val = (4 - i) * 15;
+          {/* Segmented Control */}
+          <View style={styles.segmentContainer}>
+            <Animated.View style={[styles.segmentIndicator, tabIndicatorStyle]} />
+            {['Week', 'Year'].map((tab) => {
+              const isActive = activeTab === tab;
               return (
-                <React.Fragment key={i}>
-                  <Line x1="45" y1={y} x2={CHART_WIDTH - 15} y2={y} stroke="rgba(255, 255, 255, 0.1)" strokeWidth="1" strokeDasharray="4 4" />
-                  <SvgText x="15" y={y + 4} fill="#A8C7FF" fontSize="11" fontWeight="500">{val}m</SvgText>
-                </React.Fragment>
+                <TouchableOpacity
+                  key={tab}
+                  style={styles.segmentTab}
+                  onPress={() => setActiveTab(tab as any)}
+                >
+                  <Text style={[styles.segmentText, isActive && styles.segmentTextActive]}>
+                    {tab}
+                  </Text>
+                </TouchableOpacity>
               );
             })}
-
-            {/* Area Fill */}
-            <AnimatedPath animatedProps={animatedAreaProps} fill="url(#chartGrad)" />
-
-            {/* Line Chart */}
-            <AnimatedPath animatedProps={animatedLineProps} fill="none" stroke={PRIMARY_BLUE} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-
-            {/* Highest Point Indicator */}
-            <Animated.View style={[
-                styles.highestIndicator, 
-                { left: chartData.highestPoint.x - 6, top: chartData.highestPoint.y - 6, position: 'absolute' }
-              ]} 
-            />
-          </Svg>
-
-          {/* X Axis Labels */}
-          <View style={styles.xLabelsContainer}>
-            {chartData.labels.map((lbl, idx) => (
-              <Text key={idx} style={styles.xLabel}>{lbl}</Text>
-            ))}
           </View>
-        </View>
 
-        {/* Activity Summary Section */}
-        <View style={styles.summaryHeader}>
-          <Text style={styles.summaryTitle}>Activity Summary</Text>
-          <Text style={styles.summarySubtitle}>This report updates automatically as you complete focus sessions.</Text>
-        </View>
-
-        {/* Cards Grid */}
-        <View style={styles.cardsGrid}>
-          {/* Card 1 */}
-          <View style={styles.card}>
-            <View style={styles.cardTopRow}>
-              <View style={styles.cardIconWrapper}>
-                <MaterialCommunityIcons name="clock-outline" size={20} color="#FFFFFF" />
+          {/* Chart Area */}
+          <View style={styles.chartCard}>
+            
+            <View style={styles.chartContainer}>
+              {/* Bars */}
+              <View style={styles.barsContainer}>
+                {graphData.values.map((val, i) => {
+                  const isHighlighted = activeTab === 'Week' ? i === currentDayOfWeek : i === currentMonthIndex;
+                  return (
+                    <AnimatedBar
+                      key={i}
+                      value={val}
+                      maxValue={maxValue}
+                      label={graphData.labels[i]}
+                      index={i}
+                      isHighlighted={isHighlighted}
+                      isYear={activeTab === 'Year'}
+                    />
+                  );
+                })}
               </View>
-              <Text style={styles.cardNumber}>{Math.floor(totalTime / 60)}h {(totalTime % 60)}m</Text>
             </View>
-            <Text style={styles.cardLabel}>Total Focus Time</Text>
+
+            {/* Empty State Overlay */}
+            {!hasSessions && (
+              <View style={styles.emptyStateContainer} pointerEvents="none">
+                <Text style={styles.emptyStateText}>Complete your first focus session to view your productivity.</Text>
+              </View>
+            )}
           </View>
 
-          {/* Card 2 */}
-          <View style={styles.card}>
-            <View style={styles.cardTopRow}>
-              <View style={styles.cardIconWrapper}>
-                <MaterialCommunityIcons name="calendar-check" size={20} color="#FFFFFF" />
+          {/* Cards Grid */}
+          <View style={styles.cardsGrid}>
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View style={styles.cardIconWrapper}>
+                  <MaterialCommunityIcons name="timer-outline" size={22} color={PRIMARY_BLUE} />
+                </View>
+                <Text style={styles.cardNumber}>{activeSummary.card1.value}</Text>
               </View>
-              <Text style={styles.cardNumber}>{totalSessions}</Text>
+              <Text style={styles.cardLabel}>{activeSummary.card1.label}</Text>
+              <Text style={styles.cardSubtitle}>{activeSummary.card1.subtitle}</Text>
             </View>
-            <Text style={styles.cardLabel}>Total Sessions</Text>
-          </View>
 
-          {/* Card 3 */}
-          <View style={styles.card}>
-            <View style={styles.cardTopRow}>
-              <View style={styles.cardIconWrapper}>
-                <MaterialCommunityIcons name="chart-bar" size={20} color="#FFFFFF" />
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View style={styles.cardIconWrapper}>
+                  <MaterialCommunityIcons name="calendar-check-outline" size={20} color={PRIMARY_BLUE} />
+                </View>
+                <Text style={styles.cardNumber}>{activeSummary.card2.value}</Text>
               </View>
-              <Text style={styles.cardNumber}>{avgSession}m</Text>
+              <Text style={styles.cardLabel}>{activeSummary.card2.label}</Text>
+              <Text style={styles.cardSubtitle}>{activeSummary.card2.subtitle}</Text>
             </View>
-            <Text style={styles.cardLabel}>Average Session</Text>
-          </View>
 
-          {/* Card 4 */}
-          <View style={styles.card}>
-            <View style={styles.cardTopRow}>
-              <View style={styles.cardIconWrapper}>
-                <MaterialCommunityIcons name="lightning-bolt" size={20} color="#FFFFFF" />
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View style={styles.cardIconWrapper}>
+                  <MaterialCommunityIcons name="star" size={22} color={PRIMARY_BLUE} />
+                </View>
+                <Text style={styles.cardNumber}>{activeSummary.card4.value}</Text>
               </View>
-              <Text style={styles.cardNumber}>{Math.floor(bestDayTime / 60)}h {(bestDayTime % 60)}m</Text>
+              <Text style={styles.cardLabel}>{activeSummary.card4.label}</Text>
+              <Text style={styles.cardSubtitle}>{activeSummary.card4.subtitle}</Text>
             </View>
-            <Text style={styles.cardLabel}>Best Day</Text>
+
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View style={styles.cardIconWrapper}>
+                  <MaterialCommunityIcons name="fire" size={22} color={PRIMARY_BLUE} />
+                </View>
+                <Text style={styles.cardNumber}>{activeSummary.card3.value}</Text>
+              </View>
+              <Text style={styles.cardLabel}>{activeSummary.card3.label}</Text>
+              <Text style={styles.cardSubtitle}>{activeSummary.card3.subtitle}</Text>
+            </View>
           </View>
-        </View>
 
         </ScrollView>
       </SafeAreaView>
-    </ExpoLinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  gradientBg: {
+  mainContainer: {
     flex: 1,
+    backgroundColor: '#081B47', // Fixed background color per spec
   },
   safeArea: {
     flex: 1,
     backgroundColor: 'transparent',
   },
   container: {
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
     paddingTop: 20,
-    paddingBottom: 180, // Extra padding for floating tab bar
+    paddingBottom: 180,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
   },
   title: {
     fontSize: 34,
@@ -317,18 +318,33 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 15,
-    color: '#A8C7FF',
+    color: LIGHT_BLUE,
     lineHeight: 22,
     fontFamily: 'System',
   },
   segmentContainer: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'rgba(16, 39, 95, 0.5)', // Match cards (#10275F)
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 32,
     padding: 6,
-    marginBottom: 32,
+    marginBottom: 24,
+    position: 'relative',
+  },
+  segmentIndicator: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: (width - 48 - 12) / 2, // Half the container width minus padding
+    height: '100%',
+    backgroundColor: PRIMARY_BLUE,
+    borderRadius: 26,
+    shadowColor: PRIMARY_BLUE,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   segmentTab: {
     flex: 1,
@@ -336,107 +352,169 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  segmentTabActive: {
-    backgroundColor: PRIMARY_BLUE,
-    shadowColor: PRIMARY_BLUE,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    zIndex: 1, // Be above indicator
   },
   segmentText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#A8C7FF',
+    color: LIGHT_BLUE,
   },
   segmentTextActive: {
     color: '#FFFFFF',
   },
-  chartContainer: {
-    marginBottom: 96,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 20,
-    paddingVertical: 24,
+  chartCard: {
+    backgroundColor: 'rgba(16, 39, 95, 0.5)', // #10275F with transparency for glass
+    borderRadius: 24,
+    padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 24,
+    position: 'relative',
   },
-  highestIndicator: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: PRIMARY_BLUE,
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-    shadowColor: PRIMARY_BLUE,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 6,
+  chartContainer: {
+    height: CHART_HEIGHT,
+    flexDirection: 'row',
+    position: 'relative',
+    marginTop: 10,
+    marginBottom: 40, // Space for X labels
   },
-  xLabelsContainer: {
+  barsContainer: {
+    flex: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: CHART_WIDTH,
-    marginTop: 16,
-    paddingHorizontal: 28,
+    alignItems: 'flex-end',
+    height: '100%',
   },
-  xLabel: {
-    fontSize: 12,
-    color: '#A8C7FF',
-    fontWeight: '500',
+  barColumn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    height: '100%',
   },
-  summaryHeader: {
-    marginBottom: 20,
+  floatingTextContainer: {
+    position: 'absolute',
+    bottom: 0,
+    alignItems: 'center',
+    width: 60,
+    zIndex: 10,
   },
-  summaryTitle: {
-    fontSize: 22,
-    fontWeight: '800',
+  barValueText: {
+    fontSize: 10,
     color: '#FFFFFF',
-    marginBottom: 6,
+    fontWeight: '700',
+    textAlign: 'center',
   },
-  summarySubtitle: {
+  barTouchable: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  barBackground: {
+    height: '100%',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  barFill: {
+    borderRadius: 6, // Fully rounded (top and bottom)
+    overflow: 'hidden',
+    backgroundColor: PRIMARY_BLUE,
+    shadowColor: PRIMARY_BLUE,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  barFillHighlighted: {
+    backgroundColor: HIGHLIGHT_BLUE,
+    shadowColor: HIGHLIGHT_BLUE,
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  barGradient: {
+    flex: 1,
+  },
+  barLabelContainer: {
+    position: 'absolute',
+    bottom: -40,
+    alignItems: 'center',
+    height: 40,
+    justifyContent: 'flex-start',
+  },
+  barLabelText: {
+    fontSize: 10,
+    color: LIGHT_BLUE,
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  barLabelTextHighlighted: {
+    color: PRIMARY_BLUE,
+    fontWeight: '700',
+  },
+  emptyStateContainer: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    right: 20,
+    bottom: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(2, 11, 46, 0.6)',
+    borderRadius: 16,
+  },
+  emptyStateText: {
+    color: LIGHT_BLUE,
     fontSize: 14,
-    color: '#A8C7FF',
+    textAlign: 'center',
+    paddingHorizontal: 20,
     lineHeight: 20,
   },
   cardsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 16,
+    gap: 12,
   },
   card: {
-    width: (width - 56 - 16) / 2, // 2 columns, 28 padding horizontal
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 16,
-    padding: 14,
+    width: (width - 48 - 12) / 2, // 2 columns, 24 padding horiz
+    backgroundColor: 'rgba(16, 39, 95, 0.5)', // Match design (#10275F)
+    borderRadius: 20,
+    padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  cardTopRow: {
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
   },
   cardIconWrapper: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: 'rgba(30, 144, 255, 0.2)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(30, 144, 255, 0.35)',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
   },
+  cardLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
   cardNumber: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
     color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
   },
-  cardLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#A8C7FF',
+  cardSubtitle: {
+    fontSize: 11,
+    color: LIGHT_BLUE,
+    lineHeight: 16,
   },
 });

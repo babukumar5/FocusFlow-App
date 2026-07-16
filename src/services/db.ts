@@ -96,124 +96,168 @@ export const initDB = () => {
 
 export const getUser = () => {
   if (!db) return null;
-  return db.getFirstSync<{ id: number; username: string; createdAt: number }>('SELECT * FROM User LIMIT 1');
+  try {
+    return db.getFirstSync<{ id: number; username: string; createdAt: number }>('SELECT * FROM User LIMIT 1');
+  } catch (error) {
+    console.error("Database: Failed to get user", error);
+    return null;
+  }
 };
 
 export const createUser = (username: string) => {
   if (!db) return;
-  db.runSync('INSERT INTO User (username, createdAt) VALUES (?, ?)', [username, Date.now()]);
+  try {
+    db.runSync('INSERT INTO User (username, createdAt) VALUES (?, ?)', [username, Date.now()]);
+  } catch (error) {
+    console.error("Database: Failed to create user", error);
+  }
 };
 
 export const deleteUser = () => {
   if (!db) return;
-  db.runSync('DELETE FROM User');
-  db.runSync('DELETE FROM Sessions');
-  // Reset settings
-  updateSettings(defaultSettings);
+  try {
+    db.runSync('DELETE FROM User');
+    db.runSync('DELETE FROM Sessions');
+    // Reset settings
+    updateSettings(defaultSettings);
+  } catch (error) {
+    console.error("Database: Failed to delete user", error);
+  }
 };
 
 // ─── Settings Functions ──────────────────────────────────────────────────────
 
 export const getSettings = (): UserSettings => {
   if (!db) return defaultSettings;
-  const row = db.getFirstSync<any>('SELECT * FROM Settings WHERE id = 1');
-  if (!row) return defaultSettings;
-  
-  return {
-    focusTime: row.focusDuration,
-    shortBreakTime: row.breakDuration,
-    longBreakTime: row.longBreakTime,
-    cycles: row.cycles,
-    theme: row.amoledMode === 1 ? 'amoled' : (row.theme || 'dark'),
-    soundType: row.soundType,
-    soundVolume: row.soundVolume,
-    browserNotifications: row.browserNotifications === 1,
-    autoStartBreaks: row.autoStartBreaks === 1,
-    autoStartTimers: row.autoStartFocus === 1,
-    hasCompletedOnboarding: row.hasCompletedOnboarding === 1,
-    timerSoundEnabled: row.timerSoundEnabled === 1,
-    backgroundMusic: row.backgroundMusic,
-    language: row.language,
-    notifications: row.notificationsEnabled === 1,
-  };
+  try {
+    const row = db.getFirstSync<any>('SELECT * FROM Settings WHERE id = 1');
+    if (!row) return defaultSettings;
+    
+    return {
+      focusTime: row.focusDuration ?? defaultSettings.focusTime,
+      shortBreakTime: row.breakDuration ?? defaultSettings.shortBreakTime,
+      longBreakTime: row.longBreakTime ?? defaultSettings.longBreakTime,
+      cycles: row.cycles ?? defaultSettings.cycles,
+      theme: row.amoledMode === 1 ? 'amoled' : (row.theme || defaultSettings.theme),
+      soundType: row.soundType ?? defaultSettings.soundType,
+      soundVolume: row.soundVolume ?? defaultSettings.soundVolume,
+      browserNotifications: row.browserNotifications === 1,
+      autoStartBreaks: row.autoStartBreaks === 1,
+      autoStartTimers: row.autoStartFocus === 1,
+      hasCompletedOnboarding: row.hasCompletedOnboarding === 1,
+      timerSoundEnabled: row.timerSoundEnabled === 1,
+      backgroundMusic: row.backgroundMusic ?? defaultSettings.backgroundMusic,
+      language: row.language ?? defaultSettings.language,
+      notifications: row.notificationsEnabled === 1,
+    };
+  } catch (error) {
+    console.error("Database: Failed to get settings", error);
+    return defaultSettings;
+  }
 };
 
 export const updateSettings = (settings: Partial<UserSettings>) => {
   if (!db) return;
-  const current = getSettings();
-  const merged = { ...current, ...settings };
-  
-  db.runSync(`
-    UPDATE Settings 
-    SET 
-      focusDuration = ?,
-      breakDuration = ?,
-      cycles = ?,
-      notificationsEnabled = ?,
-      amoledMode = ?,
-      autoStartFocus = ?,
-      longBreakTime = ?,
-      theme = ?,
-      soundType = ?,
-      soundVolume = ?,
-      browserNotifications = ?,
-      autoStartBreaks = ?,
-      hasCompletedOnboarding = ?,
-      timerSoundEnabled = ?,
-      backgroundMusic = ?,
-      language = ?
-    WHERE id = 1
-  `, [
-    merged.focusTime,
-    merged.shortBreakTime,
-    merged.cycles,
-    merged.notifications ? 1 : 0,
-    merged.theme === 'amoled' ? 1 : 0,
-    merged.autoStartTimers ? 1 : 0,
-    merged.longBreakTime,
-    merged.theme,
-    merged.soundType,
-    merged.soundVolume,
-    merged.browserNotifications ? 1 : 0,
-    merged.autoStartBreaks ? 1 : 0,
-    merged.hasCompletedOnboarding ? 1 : 0,
-    merged.timerSoundEnabled ? 1 : 0,
-    merged.backgroundMusic,
-    merged.language
-  ]);
+  try {
+    const current = getSettings();
+    const merged = { ...current, ...settings };
+    
+    db.runSync(`
+      UPDATE Settings 
+      SET 
+        focusDuration = ?,
+        breakDuration = ?,
+        cycles = ?,
+        notificationsEnabled = ?,
+        amoledMode = ?,
+        autoStartFocus = ?,
+        longBreakTime = ?,
+        theme = ?,
+        soundType = ?,
+        soundVolume = ?,
+        browserNotifications = ?,
+        autoStartBreaks = ?,
+        hasCompletedOnboarding = ?,
+        timerSoundEnabled = ?,
+        backgroundMusic = ?,
+        language = ?
+      WHERE id = 1
+    `, [
+      merged.focusTime,
+      merged.shortBreakTime,
+      merged.cycles,
+      merged.notifications ? 1 : 0,
+      merged.theme === 'amoled' ? 1 : 0,
+      merged.autoStartTimers ? 1 : 0,
+      merged.longBreakTime,
+      merged.theme,
+      merged.soundType,
+      merged.soundVolume,
+      merged.browserNotifications ? 1 : 0,
+      merged.autoStartBreaks ? 1 : 0,
+      merged.hasCompletedOnboarding ? 1 : 0,
+      merged.timerSoundEnabled ? 1 : 0,
+      merged.backgroundMusic,
+      merged.language
+    ]);
+  } catch (error) {
+    console.error("Database: Failed to update settings", error);
+  }
 };
 
 // ─── Session Functions ───────────────────────────────────────────────────────
 
 export const insertSession = (session: FocusSession) => {
   if (!db) return;
-  db.runSync(`
-    INSERT OR REPLACE INTO Sessions (id, date, startTime, endTime, duration, mode, completed, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    session._id,
-    session.date,
-    session.startTime,
-    session.endTime,
-    session.duration,
-    session.mode,
-    session.completed ? 1 : 0,
-    Date.now()
-  ]);
+  try {
+    db.runSync(`
+      INSERT OR REPLACE INTO Sessions (id, date, startTime, endTime, duration, mode, completed, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      session._id,
+      session.date,
+      session.startTime,
+      session.endTime,
+      session.duration,
+      session.mode,
+      session.completionStatus === 'completed' ? 1 : 0,
+      Date.now()
+    ]);
+  } catch (error) {
+    console.error("Database: Failed to insert session", error);
+  }
 };
 
 export const getCompletedSessions = (): FocusSession[] => {
   if (!db) return [];
-  const rows = db.getAllSync<any>('SELECT * FROM Sessions WHERE completed = 1 ORDER BY startTime DESC');
-  return rows.map(row => ({
-    _id: row.id,
-    date: row.date,
-    startTime: row.startTime,
-    endTime: row.endTime,
-    duration: row.duration,
-    mode: row.mode,
-    completed: row.completed === 1
-  }));
+  try {
+    const rows = db.getAllSync<any>('SELECT * FROM Sessions WHERE completed = 1 ORDER BY startTime DESC');
+    return rows.map(row => {
+      const startTimeStr = new Date(row.startTime).toISOString();
+      return {
+        _id: row.id,
+        date: row.date,
+        startTime: startTimeStr,
+        endTime: new Date(row.endTime).toISOString(),
+        duration: row.duration,
+        actualCompletedMinutes: row.duration,
+        mode: row.mode as any,
+        completionStatus: (row.completed === 1 ? 'completed' : 'interrupted') as any,
+        interrupted: row.completed !== 1,
+        user: 'local-user',
+        day: '',
+        week: 0,
+        month: '',
+        year: new Date(row.startTime).getFullYear(),
+        task: null,
+        createdAt: new Date(row.createdAt).toISOString(),
+        updatedAt: new Date(row.createdAt).toISOString(),
+      };
+    });
+  } catch (error) {
+    console.error("Database: Failed to get completed sessions", error);
+    return [];
+  }
 };
 
 

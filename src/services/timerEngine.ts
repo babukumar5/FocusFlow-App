@@ -4,8 +4,8 @@ import { haptics } from '../utils/haptics';
 import { soundService } from './soundService';
 import { showCompletionNotification } from './notificationService';
 import { getLocalDateString, getISOWeekNumber, getDayName, getMonthName } from '../utils/dateUtils';
-import { computeActivitySummary, computeTodayStats } from './statisticsService';
 import { insertSession, getCompletedSessions } from './db';
+import { useActivityStore } from '../store/activityStore';
 
 export interface StoreProxy {
   get: () => any;
@@ -14,7 +14,7 @@ export interface StoreProxy {
 
 export class TimerEngine {
   private store: StoreProxy | null = null;
-  private timeoutId: NodeJS.Timeout | null = null;
+  private timeoutId: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     // Pre-load sounds to prevent any delay on first playback
@@ -81,7 +81,6 @@ export class TimerEngine {
 
     const sessionId = this.generateSessionId();
 
-    if (sessionId !== lastCompletedSessionId) {
       const now = new Date();
       const durationSecs = this.getDurationForMode(mode);
       const startTime = sessionStartTime
@@ -107,7 +106,6 @@ export class TimerEngine {
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       };
-    }
 
     let nextMode: TimerMode = mode;
     let autoStart = false;
@@ -136,14 +134,12 @@ export class TimerEngine {
 
     const nextDuration = this.getDurationForMode(nextMode);
 
-    if (newSession) {
+    if (newSession && mode === 'FOCUS') {
       insertSession(newSession);
     }
     
     // Always use accurate SQLite sessions
     const updatedSessions = getCompletedSessions();
-    const summary = computeActivitySummary(updatedSessions);
-    const todayStats = computeTodayStats(updatedSessions);
 
     const nowTime = Date.now();
 
@@ -157,9 +153,10 @@ export class TimerEngine {
       completedPomodoros: nextCompletedPomodoros,
       sessions: updatedSessions,
       lastCompletedSessionId: newSession ? newSession._id : lastCompletedSessionId,
-      ...summary,
-      ...todayStats,
     });
+
+    // Update Activity system automatically
+    useActivityStore.getState().refresh();
 
     if (autoStart) {
       this.startTimeout(nextDuration * 1000);
@@ -320,10 +317,6 @@ export class TimerEngine {
     if (!this.store) return;
     
     const state = this.store.get();
-    if (state.recalculateStats) {
-      state.recalculateStats();
-    }
-
     const refreshedState = this.store.get();
     const { status, targetEndTime } = refreshedState;
 

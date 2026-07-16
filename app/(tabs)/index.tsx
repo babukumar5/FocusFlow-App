@@ -3,12 +3,12 @@ import {
   StyleSheet,
   View,
   Text,
-  SafeAreaView,
   Dimensions,
   TouchableOpacity,
   AppState,
   TextInput,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
