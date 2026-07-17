@@ -209,21 +209,6 @@ export const darkColors = {
   statusBar: 'light' as 'dark' | 'light' | 'auto',
 };
 
-/** AMOLED theme — true blacks for OLED displays */
-export const amoledColors = {
-  ...darkColors,
-  background: '#000000',
-  surface: '#0A0A0A',
-  surfaceVariant: '#141414',
-  surfaceElevated: '#1A1A1A',
-  border: '#1E1E1E',
-  borderLight: '#141414',
-  divider: '#1A1A1A',
-  card: '#0A0A0A',
-  cardElevated: '#141414',
-  tabBar: '#000000',
-  tabBarBorder: '#141414',
-};
 
 export type ThemeColors = typeof lightColors;
-export type ThemeMode = 'light' | 'dark' | 'amoled';
+export type ThemeMode = 'light' | 'dark';

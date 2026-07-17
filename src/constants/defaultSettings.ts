@@ -11,10 +11,8 @@ export const defaultSettings: UserSettings = {
   soundVolume: 0.8,
   browserNotifications: true,
   autoStartBreaks: false,
-  autoStartTimers: false,
   hasCompletedOnboarding: false,
   timerSoundEnabled: true,
   backgroundMusic: "None",
   language: "English",
-  notifications: true,
 };

@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, Pressable } from 'react-native';
 
 export default function TabLayout() {
   return (
@@ -12,7 +12,7 @@ export default function TabLayout() {
           bottom: Platform.OS === 'ios' ? 30 : 20,
           left: 20,
           right: 20,
-          height: 70,
+          height: 60,
           backgroundColor: 'rgba(255, 255, 255, 0.15)',
           borderRadius: 35,
           borderWidth: 1,
@@ -26,17 +26,19 @@ export default function TabLayout() {
           borderTopWidth: 1,
           borderTopColor: 'rgba(255, 255, 255, 0.3)',
         },
-        tabBarActiveTintColor: '#FFFFFF',
+        tabBarActiveTintColor: '#1E90FF',
         tabBarInactiveTintColor: 'rgba(255, 255, 255, 0.5)',
         tabBarShowLabel: true,
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '500',
-          marginBottom: 10,
+          marginBottom: 6,
         },
         tabBarItemStyle: {
-          paddingTop: 10,
+          paddingTop: 6,
         },
+        lazy: false,
+        tabBarButton: (props) => <Pressable {...(props as any)} />,
       }}>
       <Tabs.Screen
         name="index"
@@ -84,6 +86,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   activeIconWrapper: {
-    backgroundColor: '#1E90FF',
+    backgroundColor: 'transparent',
   },
 });

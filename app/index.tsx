@@ -46,8 +46,6 @@ export default function SplashScreen() {
       colors={
         settings.theme === 'light'
           ? ['#FFFFFF', '#E8F5E9']
-          : settings.theme === 'amoled'
-          ? ['#000000', '#0A0A0A']
           : ['#121212', '#1E1E1E']
       }
       style={styles.container}

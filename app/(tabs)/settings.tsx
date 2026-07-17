@@ -96,15 +96,6 @@ export default function SettingsScreen() {
             />
           </Animated.View>
 
-          <Animated.View entering={FadeInUp.delay(350).springify()}>
-            <SettingCard
-              icon="play-circle-outline"
-              title="Auto Start Focus"
-              isSwitch
-              switchValue={settings.autoStartTimers}
-              onSwitchChange={(val) => handleUpdate({ autoStartTimers: val })}
-            />
-          </Animated.View>
 
           <Animated.View entering={FadeInUp.delay(400).springify()}>
             <SettingCard
@@ -116,28 +107,11 @@ export default function SettingsScreen() {
           </Animated.View>
 
           <Animated.Text entering={FadeInUp.delay(450).springify()} style={styles.sectionTitle}>
-            Preferences
+            Support
           </Animated.Text>
 
-          <Animated.View entering={FadeInUp.delay(500).springify()}>
-            <SettingCard
-              icon="bell-outline"
-              title="Notifications"
-              isSwitch
-              switchValue={settings.notifications}
-              onSwitchChange={(val) => handleUpdate({ notifications: val })}
-            />
-          </Animated.View>
 
-          <Animated.View entering={FadeInUp.delay(550).springify()}>
-            <SettingCard
-              icon="brightness-4"
-              title="AMOLED Mode"
-              isSwitch
-              switchValue={settings.theme === 'amoled'}
-              onSwitchChange={(val) => handleUpdate({ theme: val ? 'amoled' : 'dark' })}
-            />
-          </Animated.View>
+
 
           <Animated.View entering={FadeInUp.delay(600).springify()}>
             <SettingCard

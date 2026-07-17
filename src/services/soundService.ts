@@ -125,7 +125,7 @@ class SoundService {
     }
 
     const settings = useSettingsStore.getState().settings;
-    if (!settings.timerSoundEnabled && !settings.notifications) {
+    if (!settings.timerSoundEnabled) {
       console.log(`[SoundService] Sound disabled in settings. Skipping ${type}.`);
       return;
     }

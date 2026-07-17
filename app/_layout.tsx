@@ -12,7 +12,7 @@ import { PaperProvider } from 'react-native-paper';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { lightTheme, darkTheme, amoledTheme } from '@/src/theme';
+import { lightTheme, darkTheme } from '@/src/theme';
 import { useSettingsStore } from '@/src/store/settingsStore';
 import { useAuthStore } from '@/src/store/authStore';
 import { useActivityStore } from '@/src/store/activityStore';
@@ -59,9 +59,7 @@ export default function RootLayout() {
     return null;
   }
 
-  const theme = settings.theme === 'amoled' 
-    ? amoledTheme 
-    : (settings.theme === 'light' ? lightTheme : darkTheme);
+  const theme = settings.theme === 'light' ? lightTheme : darkTheme;
 
   return (
     <SafeAreaProvider>

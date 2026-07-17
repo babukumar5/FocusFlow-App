@@ -2,7 +2,7 @@
  * FocusFlow Design Tokens — Barrel Export
  */
 
-export { palette, lightColors, darkColors, amoledColors } from './colors';
+export { palette, lightColors, darkColors } from './colors';
 export type { ThemeColors, ThemeMode } from './colors';
 export { spacing, borderRadius, elevation, iconSize } from './spacing';
 export { fontFamily, typography } from './typography';

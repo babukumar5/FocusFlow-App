@@ -84,6 +84,10 @@ export const useTimerStore = create<ExtendedTimerState>((set, get) => {
                 n.shortBreakTime !== p.shortBreakTime ||
                 n.longBreakTime !== p.longBreakTime;
 
+              if (n.cycles !== p.cycles) {
+                useTimerStore.setState({ completedPomodoros: 0 });
+              }
+
               if (!durationsChanged) return;
               useTimerStore.getState().setDurations(n.focusTime, n.shortBreakTime, n.longBreakTime);
             },

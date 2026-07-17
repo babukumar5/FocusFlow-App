@@ -46,6 +46,7 @@ export default function TimerHomeScreen() {
     reset,
     switchMode,
     syncBackgroundTime,
+    completedPomodoros,
   } = useTimerStore(
     useShallow((state) => ({
       mode: state.mode,
@@ -58,13 +59,34 @@ export default function TimerHomeScreen() {
       reset: state.reset,
       switchMode: state.switchMode,
       syncBackgroundTime: state.syncBackgroundTime,
+      completedPomodoros: state.completedPomodoros,
     }))
   );
 
-  // Single Source of Truth for total duration
   const totalDuration = mode === 'FOCUS' 
     ? settings.focusTime * 60 
     : (mode === 'BREAK' ? settings.shortBreakTime * 60 : settings.longBreakTime * 60);
+
+  const cycles = settings.cycles;
+
+  let cycleText = '';
+  if (completedPomodoros >= cycles) {
+    cycleText = `${cycles}/${cycles} • Completed 🎉`;
+  } else if (mode === 'BREAK') {
+    if (completedPomodoros === cycles - 1) {
+      cycleText = `${completedPomodoros}/${cycles} • Final Break`;
+    } else {
+      cycleText = `${completedPomodoros}/${cycles} • Break Time`;
+    }
+  } else {
+    if (completedPomodoros === 0) {
+      cycleText = `0/${cycles} • Start Focus`;
+    } else if (completedPomodoros === cycles - 1 && cycles > 2) {
+      cycleText = `${completedPomodoros}/${cycles} • One More!`;
+    } else {
+      cycleText = `${completedPomodoros}/${cycles} • Keep Going!`;
+    }
+  }
 
   useEffect(() => {
     const handleAppStateChange = (nextState: string) => {
@@ -199,6 +221,7 @@ export default function TimerHomeScreen() {
             </Svg>
 
             <View style={styles.timeDisplayOverlay}>
+              <Text style={styles.cycleIndicatorText}>{cycleText}</Text>
               <AnimatedTextInput
                 editable={false}
                 animatedProps={animatedTextProps}
@@ -319,6 +342,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  cycleIndicatorText: {
+    position: 'absolute',
+    bottom: '100%',
+    marginBottom: 12,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: 0.5,
+    width: 200,
+    textAlign: 'center',
   },
   countdownNumber: {
     fontSize: 72,

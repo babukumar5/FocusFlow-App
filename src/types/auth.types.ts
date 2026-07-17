@@ -6,18 +6,16 @@ export interface UserSettings {
   focusTime: number;
   shortBreakTime: number;
   longBreakTime: number;
-  theme: 'light' | 'dark' | 'amoled';
+  theme: 'light' | 'dark';
   soundType: string;
   soundVolume: number;
   browserNotifications: boolean;
   autoStartBreaks: boolean;
-  autoStartTimers: boolean;
   hasCompletedOnboarding: boolean;
   cycles: number;
   timerSoundEnabled: boolean;
   backgroundMusic: string;
   language: string;
-  notifications: boolean;
 }
 
 export interface UserStreak {

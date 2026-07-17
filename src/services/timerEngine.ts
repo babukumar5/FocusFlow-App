@@ -72,7 +72,7 @@ export class TimerEngine {
     const settings = useSettingsStore.getState().settings;
     haptics.success();
 
-    if (settings.notifications || settings.browserNotifications) {
+    if (settings.browserNotifications) {
       showCompletionNotification(mode === 'FOCUS');
     }
 
@@ -126,7 +126,6 @@ export class TimerEngine {
       } else {
         // Pomodoro Finished
         nextMode = 'FOCUS';
-        nextCompletedPomodoros = 0;
         autoStart = false;
         soundService.play('completed');
       }
@@ -165,7 +164,13 @@ export class TimerEngine {
 
   start() {
     if (!this.store) return;
-    const { remainingTime, mode } = this.store.get();
+    const { remainingTime, mode, completedPomodoros } = this.store.get();
+    const settings = useSettingsStore.getState().settings;
+    
+    let nextCompleted = completedPomodoros;
+    if (mode === 'FOCUS' && completedPomodoros >= settings.cycles) {
+      nextCompleted = 0;
+    }
     
     // Always fetch fresh duration from settings just in case remainingTime was stale
     const freshDuration = this.getDurationForMode(mode);
@@ -179,6 +184,7 @@ export class TimerEngine {
       pauseTime: null,
       remainingTime: durationToUse,
       targetEndTime,
+      completedPomodoros: nextCompleted,
     });
 
     haptics.lightTap();
@@ -238,6 +244,7 @@ export class TimerEngine {
       sessionStartTime: null,
       pauseTime: null,
       targetEndTime: null,
+      completedPomodoros: 0,
     });
 
     haptics.mediumTap();
@@ -261,7 +268,6 @@ export class TimerEngine {
         nextMode = 'FOCUS';
       } else {
         nextMode = 'FOCUS';
-        nextPomodoros = 0;
       }
     }
 
