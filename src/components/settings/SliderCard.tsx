@@ -1,8 +1,9 @@
-import React, { useRef } from 'react';
-import { View, Text, StyleSheet, Animated as RNAnimated, Pressable } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import { haptics } from '@/src/utils/haptics';
+import { AnimatedPressable } from '@/src/components/common/AnimatedPressable';
 
 const PRIMARY_BLUE = '#1E90FF';
 
@@ -27,28 +28,18 @@ export default function SliderCard({
   unit = '',
   onValueChange,
 }: SliderCardProps) {
-  const scale = useRef(new RNAnimated.Value(1)).current;
+  const [localValue, setLocalValue] = useState(value);
 
-  const handlePressIn = () => {
-    RNAnimated.spring(scale, {
-      toValue: 0.98,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    RNAnimated.spring(scale, {
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
-  };
+  // Sync with external value changes (e.g. from reset)
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
 
   return (
-    <Pressable onPressIn={handlePressIn} onPressOut={handlePressOut}>
-      <RNAnimated.View style={[styles.card, { transform: [{ scale }] }]}>
-        <View style={styles.header}>
-          <View style={styles.titleRow}>
-            <View style={styles.iconContainer}>
+    <AnimatedPressable style={styles.card}>
+      <View style={styles.header}>
+        <View style={styles.titleRow}>
+          <View style={styles.iconContainer}>
               <MaterialCommunityIcons name={icon} size={22} color={PRIMARY_BLUE} />
             </View>
             <Text style={styles.title}>
@@ -56,7 +47,7 @@ export default function SliderCard({
             </Text>
           </View>
           <Text style={styles.valueText}>
-            {value}{unit}
+            {localValue}{unit}
           </Text>
         </View>
         
@@ -66,20 +57,20 @@ export default function SliderCard({
             minimumValue={min}
             maximumValue={max}
             step={step}
-            value={value}
+            value={localValue}
             onValueChange={(val) => {
-              onValueChange(val);
+              setLocalValue(val);
             }}
-            onSlidingComplete={() => {
+            onSlidingComplete={(val) => {
               haptics.selection();
+              onValueChange(val);
             }}
             minimumTrackTintColor={PRIMARY_BLUE}
             maximumTrackTintColor="rgba(255, 255, 255, 0.1)" // iOS like track
             thumbTintColor="#FFFFFF"
           />
         </View>
-      </RNAnimated.View>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

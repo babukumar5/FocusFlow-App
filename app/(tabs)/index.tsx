@@ -4,7 +4,6 @@ import {
   View,
   Text,
   Dimensions,
-  TouchableOpacity,
   AppState,
   TextInput,
 } from 'react-native';
@@ -27,6 +26,8 @@ import { useSettingsStore } from '@/src/store/settingsStore';
 import { useShallow } from 'zustand/react/shallow';
 import { formatTime } from '@/src/utils/formatTime';
 import { haptics } from '@/src/utils/haptics';
+import { AnimatedPressable } from '@/src/components/common/AnimatedPressable';
+import { useScreenTransition } from '@/src/utils/animations';
 
 const { width } = Dimensions.get('window');
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -162,6 +163,8 @@ export default function TimerHomeScreen() {
     } as any;
   });
 
+  const screenStyle = useScreenTransition();
+
   return (
     <LinearGradient
       colors={['#1E5BB0', '#071B49']}
@@ -170,7 +173,8 @@ export default function TimerHomeScreen() {
       style={styles.container}
     >
       <SafeAreaView style={styles.safeArea}>
-        {/* Title */}
+        <Animated.View style={screenStyle}>
+          {/* Title */}
         <View style={styles.headerContainer}>
           <Text style={styles.title}>Focus on your task</Text>
         </View>
@@ -231,10 +235,9 @@ export default function TimerHomeScreen() {
           </View>
 
           {/* Mode Selector */}
-          <TouchableOpacity 
+          <AnimatedPressable 
             style={styles.modeSelector}
             onPress={() => switchMode(mode === 'FOCUS' ? 'BREAK' : 'FOCUS')}
-            activeOpacity={0.7}
           >
             <MaterialCommunityIcons name="chevron-down" size={20} color="#FFFFFF" />
             <Text style={styles.modeSelectorText}>
@@ -243,7 +246,7 @@ export default function TimerHomeScreen() {
                 {mode === 'FOCUS' ? settings.focusTime : settings.shortBreakTime} MIN
               </Text>
             </Text>
-          </TouchableOpacity>
+          </AnimatedPressable>
         </View>
 
         {/* Bottom Controls */}
@@ -251,7 +254,7 @@ export default function TimerHomeScreen() {
           {status === 'paused' ? (
             <>
               {/* Reset Control */}
-              <TouchableOpacity
+              <AnimatedPressable
                 style={styles.actionBtn}
                 onPress={() => {
                   haptics.heavyTap();
@@ -261,10 +264,10 @@ export default function TimerHomeScreen() {
                 <View style={styles.btnInner}>
                   <MaterialCommunityIcons name="stop" size={28} color="#FFFFFF" />
                 </View>
-              </TouchableOpacity>
+              </AnimatedPressable>
               
               {/* Resume Control */}
-              <TouchableOpacity
+              <AnimatedPressable
                 style={styles.actionBtn}
                 onPress={() => {
                   haptics.lightTap();
@@ -274,11 +277,11 @@ export default function TimerHomeScreen() {
                 <View style={styles.btnInner}>
                   <MaterialCommunityIcons name="play" size={32} color="#FFFFFF" />
                 </View>
-              </TouchableOpacity>
+              </AnimatedPressable>
             </>
           ) : (
             /* Main Center Control (Play/Pause) */
-            <TouchableOpacity
+            <AnimatedPressable
               style={styles.actionBtn}
               onPress={() => {
                 haptics.lightTap();
@@ -292,9 +295,10 @@ export default function TimerHomeScreen() {
               <View style={styles.btnInner}>
                 <MaterialCommunityIcons name={status === 'running' ? 'pause' : 'play'} size={32} color="#FFFFFF" />
               </View>
-            </TouchableOpacity>
+            </AnimatedPressable>
           )}
         </View>
+        </Animated.View>
       </SafeAreaView>
     </LinearGradient>
   );

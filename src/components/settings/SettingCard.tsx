@@ -1,7 +1,8 @@
-import React, { useRef } from 'react';
-import { View, Text, StyleSheet, Animated as RNAnimated, Pressable, Switch } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, Switch } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { haptics } from '@/src/utils/haptics';
+import { AnimatedPressable } from '@/src/components/common/AnimatedPressable';
 
 const PRIMARY_BLUE = '#1E90FF';
 
@@ -26,34 +27,16 @@ export default function SettingCard({
   rightText,
   hideArrow = false,
 }: SettingCardProps) {
-  const scale = useRef(new RNAnimated.Value(1)).current;
-
-  const handlePressIn = () => {
-    RNAnimated.spring(scale, {
-      toValue: 0.98,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    RNAnimated.spring(scale, {
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
-  };
-
   return (
-    <Pressable
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
+    <AnimatedPressable
       onPress={() => {
         if (!isSwitch && onPress) {
           haptics.lightTap();
           onPress();
         }
       }}
+      style={styles.card}
     >
-      <RNAnimated.View style={[styles.card, { transform: [{ scale }] }]}>
         <View style={styles.iconContainer}>
           <MaterialCommunityIcons name={icon} size={22} color={PRIMARY_BLUE} />
         </View>
@@ -81,8 +64,7 @@ export default function SettingCard({
         ) : !hideArrow ? (
           <MaterialCommunityIcons name="chevron-right" size={20} color="rgba(255,255,255,0.3)" style={styles.chevron} />
         ) : null}
-      </RNAnimated.View>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

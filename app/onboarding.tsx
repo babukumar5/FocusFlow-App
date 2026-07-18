@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { createUser } from '@/src/services/db';
 import { useAuthStore } from '@/src/store/authStore';
+import { AnimatedPressable } from '@/src/components/common/AnimatedPressable';
 
 const PRIMARY_BLUE = '#1E90FF';
 
@@ -53,13 +54,13 @@ export default function OnboardingScreen() {
             </View>
           )}
 
-          <TouchableOpacity 
+          <AnimatedPressable 
             style={[styles.button, (step === 2 && !username.trim()) && styles.buttonDisabled]} 
             onPress={handleNext}
             disabled={step === 2 && !username.trim()}
           >
             <Text style={styles.buttonText}>{step === 1 ? 'I Agree' : 'Get Started'}</Text>
-          </TouchableOpacity>
+          </AnimatedPressable>
         </View>
       </SafeAreaView>
     </ExpoLinearGradient>

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useTheme, Menu } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { spacing, borderRadius } from '@/src/constants';
 import { haptics } from '@/src/utils/haptics';
+import { AnimatedPressable } from '@/src/components/common/AnimatedPressable';
 
 interface DropdownCardProps {
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -36,7 +37,7 @@ export default function DropdownCard({
         visible={visible}
         onDismiss={closeMenu}
         anchor={
-          <TouchableOpacity activeOpacity={0.7} onPress={openMenu} style={styles.anchor}>
+          <AnimatedPressable onPress={openMenu} style={styles.anchor}>
             <View style={[styles.iconContainer, { backgroundColor: `${theme.colors.primary}1A` }]}>
               <MaterialCommunityIcons name={icon} size={24} color={theme.colors.primary} />
             </View>
@@ -49,7 +50,7 @@ export default function DropdownCard({
               {value}
             </Text>
             <MaterialCommunityIcons name="menu-down" size={24} color={theme.colors.onSurfaceVariant} />
-          </TouchableOpacity>
+          </AnimatedPressable>
         }
         contentStyle={{ backgroundColor: theme.colors.elevation.level2, borderRadius: borderRadius.md }}
       >

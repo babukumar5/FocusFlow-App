@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   Dimensions,
 } from 'react-native';
@@ -16,8 +15,11 @@ import Animated, {
   withTiming,
   withDelay,
   Easing,
+  runOnJS,
 } from 'react-native-reanimated';
 import { useActivityStore } from '@/src/store/activityStore';
+import { AnimatedPressable } from '@/src/components/common/AnimatedPressable';
+import { useScreenTransition, CustomCardEntrance } from '@/src/utils/animations';
 
 const { width } = Dimensions.get('window');
 const CHART_WIDTH = width - 48; // padding 24 on each side
@@ -121,6 +123,34 @@ export default function ActivityScreen() {
   const activeSummary = activeTab === 'Week' ? summary.week : summary.year;
   const graphData = activeTab === 'Week' ? graphs.week : graphs.year;
 
+  // Graph Transition Animation
+  const graphOpacity = useSharedValue(1);
+  const graphScale = useSharedValue(1);
+
+  const handleTabChange = (tab: 'Week' | 'Year') => {
+    if (activeTab === tab) return;
+    
+    // 1. Instantly hide the graph on the UI thread to prevent flicker
+    graphOpacity.value = 0;
+    graphScale.value = 0.98;
+    
+    // 2. Synchronously trigger the React re-render with new data
+    setActiveTab(tab);
+    
+    // 3. Queue the fade-in animation slightly behind the render.
+    // This ensures the UI thread has processed the `0` opacity and the new DOM
+    // before it begins fading back to `1`.
+    setTimeout(() => {
+      graphOpacity.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) });
+      graphScale.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) });
+    }, 32);
+  };
+
+  const graphAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: graphOpacity.value,
+    transform: [{ scale: graphScale.value }],
+  }));
+
   // Segmented Control Animation
   const tabPosition = useSharedValue(0);
   useEffect(() => {
@@ -172,16 +202,18 @@ export default function ActivityScreen() {
   const currentMonthIndex = now.getMonth();
   const currentDayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1; // 0-6 for Mon-Sun
 
+  const screenStyle = useScreenTransition();
+
   return (
     <View style={styles.mainContainer}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-          
+          <Animated.View style={screenStyle}>
           {/* Header */}
           <View style={styles.header}>
-            <View>
+            <View style={{ width: '100%', flex: 1 }}>
               <Text style={styles.title}>Activity</Text>
-              <Text style={styles.subtitle}>See your productivity and focus</Text>
+              <Text style={styles.subtitle}>See your productivity</Text>
             </View>
           </View>
 
@@ -191,15 +223,15 @@ export default function ActivityScreen() {
             {['Week', 'Year'].map((tab) => {
               const isActive = activeTab === tab;
               return (
-                <TouchableOpacity
+                <AnimatedPressable
                   key={tab}
                   style={styles.segmentTab}
-                  onPress={() => setActiveTab(tab as any)}
+                  onPress={() => handleTabChange(tab as any)}
                 >
                   <Text style={[styles.segmentText, isActive && styles.segmentTextActive]}>
                     {tab}
                   </Text>
-                </TouchableOpacity>
+                </AnimatedPressable>
               );
             })}
           </View>
@@ -207,7 +239,7 @@ export default function ActivityScreen() {
           {/* Chart Area */}
           <View style={styles.chartCard}>
             
-            <View style={styles.chartContainer}>
+            <Animated.View style={[styles.chartContainer, graphAnimatedStyle]}>
               {/* Bars */}
               <View style={styles.barsContainer}>
                 {graphData.values.map((val, i) => {
@@ -225,19 +257,19 @@ export default function ActivityScreen() {
                   );
                 })}
               </View>
-            </View>
+            </Animated.View>
 
             {/* Empty State Overlay */}
             {!hasSessions && (
-              <View style={styles.emptyStateContainer} pointerEvents="none">
+              <Animated.View style={[styles.emptyStateContainer, graphAnimatedStyle]} pointerEvents="none">
                 <Text style={styles.emptyStateText}>Complete your first focus session to view your productivity.</Text>
-              </View>
+              </Animated.View>
             )}
           </View>
 
           {/* Cards Grid */}
           <View style={styles.cardsGrid}>
-            <View style={styles.card}>
+            <Animated.View entering={CustomCardEntrance(0)} style={styles.card}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardIconWrapper}>
                   <MaterialCommunityIcons name="timer-outline" size={22} color={PRIMARY_BLUE} />
@@ -246,9 +278,9 @@ export default function ActivityScreen() {
               </View>
               <Text style={styles.cardLabel}>{activeSummary.card1.label}</Text>
               <Text style={styles.cardSubtitle}>{activeSummary.card1.subtitle}</Text>
-            </View>
+            </Animated.View>
 
-            <View style={styles.card}>
+            <Animated.View entering={CustomCardEntrance(50)} style={styles.card}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardIconWrapper}>
                   <MaterialCommunityIcons name="calendar-check-outline" size={20} color={PRIMARY_BLUE} />
@@ -257,9 +289,9 @@ export default function ActivityScreen() {
               </View>
               <Text style={styles.cardLabel}>{activeSummary.card2.label}</Text>
               <Text style={styles.cardSubtitle}>{activeSummary.card2.subtitle}</Text>
-            </View>
+            </Animated.View>
 
-            <View style={styles.card}>
+            <Animated.View entering={CustomCardEntrance(100)} style={styles.card}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardIconWrapper}>
                   <MaterialCommunityIcons name="star" size={22} color={PRIMARY_BLUE} />
@@ -268,9 +300,9 @@ export default function ActivityScreen() {
               </View>
               <Text style={styles.cardLabel}>{activeSummary.card4.label}</Text>
               <Text style={styles.cardSubtitle}>{activeSummary.card4.subtitle}</Text>
-            </View>
+            </Animated.View>
 
-            <View style={styles.card}>
+            <Animated.View entering={CustomCardEntrance(150)} style={styles.card}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardIconWrapper}>
                   <MaterialCommunityIcons name="fire" size={22} color={PRIMARY_BLUE} />
@@ -279,9 +311,9 @@ export default function ActivityScreen() {
               </View>
               <Text style={styles.cardLabel}>{activeSummary.card3.label}</Text>
               <Text style={styles.cardSubtitle}>{activeSummary.card3.subtitle}</Text>
-            </View>
+            </Animated.View>
           </View>
-
+          </Animated.View>
         </ScrollView>
       </SafeAreaView>
     </View>

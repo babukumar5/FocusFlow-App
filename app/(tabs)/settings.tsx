@@ -3,10 +3,11 @@ import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeInUp, FadeIn } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSettingsStore } from '@/src/store/settingsStore';
 import { useAuthStore } from '@/src/store/authStore';
 import { useTimerStore } from '@/src/store/timerStore';
+import { useScreenTransition, CustomCardEntrance } from '@/src/utils/animations';
 
 import SettingCard from '@/src/components/settings/SettingCard';
 import SliderCard from '@/src/components/settings/SliderCard';
@@ -38,6 +39,8 @@ export default function SettingsScreen() {
     );
   };
 
+  const screenStyle = useScreenTransition();
+
   return (
     <ExpoLinearGradient colors={['#020B2E', '#0A2F73']} style={styles.gradientBg}>
       {/* Very subtle radial glow */}
@@ -45,7 +48,7 @@ export default function SettingsScreen() {
 
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-          
+          <Animated.View style={screenStyle}>
           <Animated.View entering={FadeIn.duration(600)} style={[styles.header, { justifyContent: 'center' }]}>
             <View style={{ alignItems: 'center' }}>
               <Text style={[styles.title, { textAlign: 'center' }]}>Settings</Text>
@@ -53,11 +56,11 @@ export default function SettingsScreen() {
             </View>
           </Animated.View>
 
-          <Animated.Text entering={FadeInUp.delay(100).springify()} style={[styles.sectionTitle, { marginTop: 16 }]}>
+          <Animated.Text entering={CustomCardEntrance(100)} style={[styles.sectionTitle, { marginTop: 16 }]}>
             Timer Configuration
           </Animated.Text>
           
-          <Animated.View entering={FadeInUp.delay(150).springify()}>
+          <Animated.View entering={CustomCardEntrance(150)}>
             <SliderCard
               icon="brain"
               title="Focus Duration"
@@ -70,7 +73,7 @@ export default function SettingsScreen() {
             />
           </Animated.View>
 
-          <Animated.View entering={FadeInUp.delay(200).springify()}>
+          <Animated.View entering={CustomCardEntrance(200)}>
             <SliderCard
               icon="coffee-outline"
               title="Break"
@@ -83,7 +86,7 @@ export default function SettingsScreen() {
             />
           </Animated.View>
 
-          <Animated.View entering={FadeInUp.delay(250).springify()}>
+          <Animated.View entering={CustomCardEntrance(250)}>
             <SliderCard
               icon="refresh"
               title="Cycles"
@@ -97,7 +100,7 @@ export default function SettingsScreen() {
           </Animated.View>
 
 
-          <Animated.View entering={FadeInUp.delay(400).springify()}>
+          <Animated.View entering={CustomCardEntrance(400)}>
             <SettingCard
               icon="refresh"
               title="Reset Timer"
@@ -106,14 +109,14 @@ export default function SettingsScreen() {
             />
           </Animated.View>
 
-          <Animated.Text entering={FadeInUp.delay(450).springify()} style={styles.sectionTitle}>
+          <Animated.Text entering={CustomCardEntrance(450)} style={styles.sectionTitle}>
             Support
           </Animated.Text>
 
 
 
 
-          <Animated.View entering={FadeInUp.delay(600).springify()}>
+          <Animated.View entering={CustomCardEntrance(600)}>
             <SettingCard
               icon="help-circle-outline"
               title="How to Use"
@@ -121,7 +124,7 @@ export default function SettingsScreen() {
             />
           </Animated.View>
 
-          <Animated.View entering={FadeInUp.delay(650).springify()}>
+          <Animated.View entering={CustomCardEntrance(650)}>
             <SettingCard
               icon="email-outline"
               title="Write Us"
@@ -129,14 +132,14 @@ export default function SettingsScreen() {
             />
           </Animated.View>
 
-          <Animated.View entering={FadeInUp.delay(700).springify()}>
+          <Animated.View entering={CustomCardEntrance(700)}>
             <SettingCard
               icon="star-outline"
               title="Rate Us"
               onPress={() => {}}
             />
           </Animated.View>
-
+          </Animated.View>
         </ScrollView>
       </SafeAreaView>
     </ExpoLinearGradient>

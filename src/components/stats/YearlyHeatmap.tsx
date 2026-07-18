@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useTheme, Menu, Card } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { spacing } from '@/src/constants';
+import { AnimatedPressable } from '@/src/components/common/AnimatedPressable';
 
 interface Session {
   date: string;
@@ -90,18 +91,18 @@ export default function YearlyHeatmap({ sessions, selectedYear, onYearChange }: 
     <Card style={[styles.card, { backgroundColor: theme.colors.surface }]}>
       <Card.Content>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => onYearChange(selectedYear - 1)} style={styles.iconBtn}>
+          <AnimatedPressable onPress={() => onYearChange(selectedYear - 1)} style={styles.iconBtn}>
             <MaterialCommunityIcons name="chevron-left" size={24} color={theme.colors.onSurfaceVariant} />
-          </TouchableOpacity>
+          </AnimatedPressable>
           
           <Menu
             visible={menuVisible}
             onDismiss={() => setMenuVisible(false)}
             anchor={
-              <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.yearSelector}>
+              <AnimatedPressable onPress={() => setMenuVisible(true)} style={styles.yearSelector}>
                 <Text style={[styles.yearText, { color: theme.colors.primary }]}>{selectedYear}</Text>
                 <MaterialCommunityIcons name="menu-down" size={20} color={theme.colors.primary} />
-              </TouchableOpacity>
+              </AnimatedPressable>
             }
             contentStyle={{ backgroundColor: theme.colors.elevation.level2 }}
           >
@@ -114,9 +115,9 @@ export default function YearlyHeatmap({ sessions, selectedYear, onYearChange }: 
             ))}
           </Menu>
 
-          <TouchableOpacity onPress={() => onYearChange(selectedYear + 1)} style={styles.iconBtn}>
+          <AnimatedPressable onPress={() => onYearChange(selectedYear + 1)} style={styles.iconBtn}>
             <MaterialCommunityIcons name="chevron-right" size={24} color={theme.colors.onSurfaceVariant} />
-          </TouchableOpacity>
+          </AnimatedPressable>
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.heatmapScroll}>
