@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FocusSession, TimerMode, TimerStatus } from "../types/timer.types";
 import { useSettingsStore } from "./settingsStore";
 import { timerEngine } from "../services/timerEngine";
@@ -37,13 +39,15 @@ export interface ExtendedTimerState {
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
-export const useTimerStore = create<ExtendedTimerState>((set, get) => {
-  // Bind the external TimerEngine to this store instance
-  timerEngine.bindStore({ get, set });
-  
-  const initialSessions = getCompletedSessions();
+export const useTimerStore = create<ExtendedTimerState>()(
+  persist(
+    (set, get) => {
+      // Bind the external TimerEngine to this store instance
+      timerEngine.bindStore({ get, set });
+      
+      const initialSessions = getCompletedSessions();
 
-  return {
+      return {
     // ── Initial state ─────────────────────────────────────────────────
     mode: "FOCUS" as TimerMode,
     status: "idle" as TimerStatus,
@@ -94,7 +98,26 @@ export const useTimerStore = create<ExtendedTimerState>((set, get) => {
           );
         },
       };
+    },
+    {
+      name: "timer-storage",
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        mode: state.mode,
+        status: state.status,
+        remainingTime: state.remainingTime,
+        sessionStartTime: state.sessionStartTime,
+        pauseTime: state.pauseTime,
+        completedPomodoros: state.completedPomodoros,
+        targetEndTime: state.targetEndTime,
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          timerEngine.handleHydration(state);
+        }
+      },
     }
+  )
 );
 
 useTimerStore.getState()._subscribeToSettings();

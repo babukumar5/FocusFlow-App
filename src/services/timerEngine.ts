@@ -55,7 +55,7 @@ export class TimerEngine {
     }
   }
 
-  private handleComplete() {
+  private handleComplete(historicalCompletionTimeMs?: number, isCatchUp: boolean = false) {
     if (!this.store) return;
     const state = this.store.get();
     if (state.status !== 'running') return;
@@ -70,10 +70,12 @@ export class TimerEngine {
     } = state;
 
     const settings = useSettingsStore.getState().settings;
-    haptics.success();
-
-    if (settings.browserNotifications) {
-      showCompletionNotification(mode === 'FOCUS');
+    
+    if (!isCatchUp) {
+      haptics.success();
+      if (settings.browserNotifications) {
+        showCompletionNotification(mode === 'FOCUS');
+      }
     }
 
     let newSession: FocusSession | null = null;
@@ -81,7 +83,8 @@ export class TimerEngine {
 
     const sessionId = this.generateSessionId();
 
-      const now = new Date();
+      const actualCompletionTime = historicalCompletionTimeMs ?? Date.now();
+      const now = new Date(actualCompletionTime);
       const durationSecs = this.getDurationForMode(mode);
       const startTime = sessionStartTime
         ? new Date(sessionStartTime)
@@ -114,7 +117,7 @@ export class TimerEngine {
       // 1. Focus Completion
       nextMode = 'BREAK';
       autoStart = true;
-      soundService.play('break');
+      if (!isCatchUp) soundService.play('break');
     } else {
       // 2. Break Completion
       nextCompletedPomodoros = completedPomodoros + 1;
@@ -122,12 +125,12 @@ export class TimerEngine {
       if (nextCompletedPomodoros < settings.cycles) {
         nextMode = 'FOCUS';
         autoStart = true;
-        soundService.play('cycle');
+        if (!isCatchUp) soundService.play('cycle');
       } else {
         // Pomodoro Finished
         nextMode = 'FOCUS';
         autoStart = false;
-        soundService.play('completed');
+        if (!isCatchUp) soundService.play('completed');
       }
     }
 
@@ -140,15 +143,13 @@ export class TimerEngine {
     // Always use accurate SQLite sessions
     const updatedSessions = getCompletedSessions();
 
-    const nowTime = Date.now();
-
     this.store.set({
       mode: nextMode,
       status: autoStart ? 'running' : 'idle',
       remainingTime: nextDuration,
-      sessionStartTime: autoStart ? nowTime : null,
+      sessionStartTime: autoStart ? actualCompletionTime : null,
       pauseTime: null,
-      targetEndTime: autoStart ? nowTime + nextDuration * 1000 : null,
+      targetEndTime: autoStart ? actualCompletionTime + nextDuration * 1000 : null,
       completedPomodoros: nextCompletedPomodoros,
       sessions: updatedSessions,
       lastCompletedSessionId: newSession ? newSession._id : lastCompletedSessionId,
@@ -157,8 +158,10 @@ export class TimerEngine {
     // Update Activity system automatically
     useActivityStore.getState().refresh();
 
-    if (autoStart) {
-      this.startTimeout(nextDuration * 1000);
+    if (autoStart && !isCatchUp) {
+      const nowTime = Date.now();
+      const nextTarget = actualCompletionTime + nextDuration * 1000;
+      this.startTimeout(Math.max(0, nextTarget - nowTime));
     }
   }
 
@@ -322,19 +325,36 @@ export class TimerEngine {
   syncBackgroundTime() {
     if (!this.store) return;
     
-    const state = this.store.get();
-    const refreshedState = this.store.get();
-    const { status, targetEndTime } = refreshedState;
+    let state = this.store.get();
+    
+    if (state.status !== 'running' || state.targetEndTime === null) return;
 
-    if (status !== 'running' || targetEndTime === null) return;
+    let now = Date.now();
+    let remainingMs = state.targetEndTime - now;
 
-    const now = Date.now();
-    const remainingMs = targetEndTime - now;
+    if (remainingMs > 0) {
+      this.startTimeout(remainingMs);
+      return;
+    }
 
-    if (remainingMs <= 0) {
-      this.stopTimeout();
-      this.handleComplete();
-    } else {
+    this.stopTimeout();
+
+    while (remainingMs <= 0) {
+      const historicalCompletionTime = state.targetEndTime;
+      
+      this.handleComplete(historicalCompletionTime, true);
+      
+      state = this.store.get();
+      
+      if (state.status !== 'running' || state.targetEndTime === null) {
+        break;
+      }
+
+      now = Date.now();
+      remainingMs = state.targetEndTime - now;
+    }
+
+    if (state.status === 'running' && state.targetEndTime !== null) {
       this.startTimeout(remainingMs);
     }
   }
@@ -343,27 +363,13 @@ export class TimerEngine {
     if (!this.store) return;
 
     if (state.status === 'running' && state.targetEndTime !== null) {
-      const now = Date.now();
-      const remainingMs = state.targetEndTime - now;
-
-      if (remainingMs <= 0) {
-        this.store.set({
-          status: 'idle',
-          remainingTime: this.getDurationForMode(state.mode),
-          targetEndTime: null,
-          sessionStartTime: null,
-        });
-      } else {
-        const remainingSeconds = Math.ceil(remainingMs / 1000);
-        this.store.set({
-          remainingTime: remainingSeconds,
-        });
-        setTimeout(() => {
-          this.syncBackgroundTime();
-        }, 0);
-      }
+      // setTimeout is used here so that handleHydration finishes, Zustand finishes 
+      // its rehydration cycle, and then we sync.
+      setTimeout(() => {
+        this.syncBackgroundTime();
+      }, 0);
     } else if (state.status === 'paused' && state.pauseTime !== null) {
-      // Nothing needed.
+      // Retain paused state exactly as is.
     } else {
       const duration = this.getDurationForMode(state.mode);
       this.store.set({
