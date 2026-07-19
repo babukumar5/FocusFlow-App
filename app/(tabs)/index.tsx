@@ -261,9 +261,7 @@ export default function TimerHomeScreen() {
                   reset();
                 }}
               >
-                <View style={styles.btnInner}>
-                  <MaterialCommunityIcons name="stop" size={28} color="#FFFFFF" />
-                </View>
+                <MaterialCommunityIcons name="stop" size={28} color="#FFFFFF" />
               </AnimatedPressable>
               
               {/* Resume Control */}
@@ -274,9 +272,7 @@ export default function TimerHomeScreen() {
                   resume();
                 }}
               >
-                <View style={styles.btnInner}>
-                  <MaterialCommunityIcons name="play" size={32} color="#FFFFFF" />
-                </View>
+                <MaterialCommunityIcons name="play" size={32} color="#FFFFFF" />
               </AnimatedPressable>
             </>
           ) : (
@@ -292,9 +288,7 @@ export default function TimerHomeScreen() {
                 }
               }}
             >
-              <View style={styles.btnInner}>
-                <MaterialCommunityIcons name={status === 'running' ? 'pause' : 'play'} size={32} color="#FFFFFF" />
-              </View>
+              <MaterialCommunityIcons name={status === 'running' ? 'pause' : 'play'} size={32} color="#FFFFFF" />
             </AnimatedPressable>
           )}
         </View>
@@ -383,11 +377,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 10,
-    elevation: 5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnInner: {
     alignItems: 'center',
     justifyContent: 'center',
   },

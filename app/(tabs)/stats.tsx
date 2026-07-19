@@ -205,7 +205,12 @@ export default function ActivityScreen() {
   const screenStyle = useScreenTransition();
 
   return (
-    <View style={styles.mainContainer}>
+    <ExpoLinearGradient 
+      colors={['#0E3366', '#030E29']} 
+      start={{ x: 0.1, y: 0.1 }} 
+      end={{ x: 0.9, y: 0.9 }} 
+      style={styles.mainContainer}
+    >
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
           <Animated.View style={screenStyle}>
@@ -316,14 +321,13 @@ export default function ActivityScreen() {
           </Animated.View>
         </ScrollView>
       </SafeAreaView>
-    </View>
+    </ExpoLinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: '#081B47', // Fixed background color per spec
   },
   safeArea: {
     flex: 1,
@@ -356,13 +360,18 @@ const styles = StyleSheet.create({
   },
   segmentContainer: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(16, 39, 95, 0.5)', // Match cards (#10275F)
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.03)',
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
     borderRadius: 32,
     padding: 6,
     marginBottom: 24,
     position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
   },
   segmentIndicator: {
     position: 'absolute',
@@ -395,13 +404,18 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   chartCard: {
-    backgroundColor: 'rgba(16, 39, 95, 0.5)', // #10275F with transparency for glass
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
     borderRadius: 24,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.03)',
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
     marginBottom: 24,
     position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
   },
   chartContainer: {
     height: CHART_HEIGHT,
@@ -510,11 +524,16 @@ const styles = StyleSheet.create({
   },
   card: {
     width: (width - 48 - 12) / 2, // 2 columns, 24 padding horiz
-    backgroundColor: 'rgba(16, 39, 95, 0.5)', // Match design (#10275F)
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.03)',
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
   },
   cardHeader: {
     flexDirection: 'row',

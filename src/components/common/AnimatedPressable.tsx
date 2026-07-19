@@ -25,7 +25,7 @@ export const AnimatedPressable: React.FC<AnimatedPressableProps> = ({
   const opacity = useSharedValue(1);
 
   const handlePressIn = (e: any) => {
-    scale.value = withTiming(0.97, { duration: 100, easing: Easing.out(Easing.ease) });
+    scale.value = withTiming(0.98, { duration: 100, easing: Easing.out(Easing.ease) });
     opacity.value = withTiming(0.95, { duration: 100, easing: Easing.out(Easing.ease) });
     if (onPressIn) onPressIn(e);
   };

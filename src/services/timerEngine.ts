@@ -117,7 +117,6 @@ export class TimerEngine {
       // 1. Focus Completion
       nextMode = 'BREAK';
       autoStart = true;
-      if (!isCatchUp) soundService.play('break');
     } else {
       // 2. Break Completion
       nextCompletedPomodoros = completedPomodoros + 1;
@@ -125,7 +124,6 @@ export class TimerEngine {
       if (nextCompletedPomodoros < settings.cycles) {
         nextMode = 'FOCUS';
         autoStart = true;
-        if (!isCatchUp) soundService.play('cycle');
       } else {
         // Pomodoro Finished
         nextMode = 'FOCUS';
@@ -291,6 +289,12 @@ export class TimerEngine {
 
   switchMode(newMode: TimerMode) {
     if (!this.store) return;
+    const { status } = this.store.get();
+    
+    if (status !== 'idle') {
+      return;
+    }
+
     this.stopTimeout();
     const duration = this.getDurationForMode(newMode);
 
