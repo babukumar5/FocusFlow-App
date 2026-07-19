@@ -206,11 +206,12 @@ export default function ActivityScreen() {
 
   return (
     <ExpoLinearGradient 
-      colors={['#0E3366', '#030E29']} 
-      start={{ x: 0.1, y: 0.1 }} 
-      end={{ x: 0.9, y: 0.9 }} 
+      colors={['#020B2E', '#0A2F73']} 
       style={styles.mainContainer}
     >
+      {/* Very subtle radial glow */}
+      <View style={styles.glowTopRight} />
+
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
           <Animated.View style={screenStyle}>
@@ -328,6 +329,16 @@ export default function ActivityScreen() {
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
+  },
+  glowTopRight: {
+    position: 'absolute',
+    top: -50,
+    right: -50,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: PRIMARY_BLUE,
+    opacity: 0.015, // Extremely subtle radial glow
   },
   safeArea: {
     flex: 1,
