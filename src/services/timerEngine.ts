@@ -2,7 +2,7 @@ import { TimerMode, TimerStatus, FocusSession, SessionMode } from '../types/time
 import { useSettingsStore } from '../store/settingsStore';
 import { haptics } from '../utils/haptics';
 import { soundService } from './soundService';
-import { showCompletionNotification } from './notificationService';
+import { scheduleExactNotification, cancelAllNotifications } from './notificationService';
 import { getLocalDateString, getISOWeekNumber, getDayName, getMonthName } from '../utils/dateUtils';
 import { insertSession, getCompletedSessions } from './db';
 import { useActivityStore } from '../store/activityStore';
@@ -55,6 +55,50 @@ export class TimerEngine {
     }
   }
 
+  private scheduleAllNotifications(initialRemainingMs: number) {
+    if (!this.store) return;
+    const state = this.store.get();
+    const settings = useSettingsStore.getState().settings;
+    
+    cancelAllNotifications();
+    if (!settings.browserNotifications) return;
+
+    let nextEventTime = Date.now() + initialRemainingMs;
+    let currentMode = state.mode;
+    let currentCompletedPomodoros = state.completedPomodoros;
+
+    let loopCount = 0;
+    while (loopCount < 50) {
+      loopCount++;
+      let nextMode: TimerMode = currentMode;
+      let nextCompleted = currentCompletedPomodoros;
+      let autoStart = false;
+
+      if (currentMode === 'FOCUS') {
+        nextMode = 'BREAK';
+        autoStart = true;
+      } else {
+        nextCompleted = currentCompletedPomodoros + 1;
+        if (nextCompleted < settings.cycles) {
+          nextMode = 'FOCUS';
+          autoStart = true;
+        } else {
+          nextMode = 'FOCUS';
+          autoStart = false;
+        }
+      }
+
+      scheduleExactNotification(currentMode === 'FOCUS', nextEventTime, !autoStart);
+
+      if (!autoStart) break;
+
+      const nextDuration = this.getDurationForMode(nextMode);
+      nextEventTime += nextDuration * 1000;
+      currentMode = nextMode;
+      currentCompletedPomodoros = nextCompleted;
+    }
+  }
+
   private handleComplete(historicalCompletionTimeMs?: number, isCatchUp: boolean = false) {
     if (!this.store) return;
     const state = this.store.get();
@@ -73,8 +117,8 @@ export class TimerEngine {
     
     if (!isCatchUp) {
       haptics.success();
-      if (settings.browserNotifications) {
-        showCompletionNotification(mode === 'FOCUS');
+      if (!settings.browserNotifications) {
+        soundService.play('completed');
       }
     }
 
@@ -128,7 +172,6 @@ export class TimerEngine {
         // Pomodoro Finished
         nextMode = 'FOCUS';
         autoStart = false;
-        if (!isCatchUp) soundService.play('completed');
       }
     }
 
@@ -191,6 +234,7 @@ export class TimerEngine {
     haptics.lightTap();
     soundService.play('start');
     this.startTimeout(durationToUse * 1000);
+    this.scheduleAllNotifications(durationToUse * 1000);
   }
 
   pause() {
@@ -199,6 +243,7 @@ export class TimerEngine {
     if (status !== 'running' || targetEndTime === null) return;
 
     this.stopTimeout();
+    cancelAllNotifications();
 
     const now = Date.now();
     const remainingMs = Math.max(0, targetEndTime - now);
@@ -230,12 +275,14 @@ export class TimerEngine {
 
     haptics.lightTap();
     this.startTimeout(remainingMs);
+    this.scheduleAllNotifications(remainingMs);
   }
 
   reset() {
     if (!this.store) return;
     const { mode } = this.store.get();
     this.stopTimeout();
+    cancelAllNotifications();
 
     const duration = this.getDurationForMode(mode);
 
@@ -255,6 +302,7 @@ export class TimerEngine {
     if (!this.store) return;
     const { mode, completedPomodoros } = this.store.get();
     this.stopTimeout();
+    cancelAllNotifications();
     
     const settings = useSettingsStore.getState().settings;
 
@@ -296,6 +344,7 @@ export class TimerEngine {
     }
 
     this.stopTimeout();
+    cancelAllNotifications();
     const duration = this.getDurationForMode(newMode);
 
     this.store.set({

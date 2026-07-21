@@ -44,7 +44,7 @@ class SoundService {
         }
 
         // Load one premium chime for all events
-        this.chimePlayer = createAudioPlayer(require('../../assets/audio/chime.wav'));
+        this.chimePlayer = createAudioPlayer(require('../../assets/audio/notification.wav'));
 
         this.isLoaded = true;
         console.log('[SoundService] Premium chime loaded successfully.');

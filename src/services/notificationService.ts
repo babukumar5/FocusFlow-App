@@ -19,7 +19,6 @@ let notificationsAvailable = false;
  * Call once at app startup. Safe to call multiple times.
  */
 export const initNotifications = async (): Promise<void> => {
-  // Don't use notifications in Expo Go — they crash
   if (Constants.appOwnership === 'expo') {
     notificationsAvailable = false;
     return;
@@ -43,14 +42,42 @@ export const initNotifications = async (): Promise<void> => {
             : undefined,
         }),
       });
+
+      // Set up custom sound channel for Android
+      if (typeof Notifications.setNotificationChannelAsync === 'function') {
+        Notifications.setNotificationChannelAsync('focusflow-timer-alerts', {
+          name: 'Timer Alerts',
+          importance: (Notifications as any).AndroidImportance?.HIGH,
+          sound: 'notification.wav',
+        }).catch(() => {});
+      }
     }
   } catch {
     notificationsAvailable = false;
   }
 };
 
+export const requestNotificationPermissions = async (): Promise<boolean> => {
+  if (!notificationsAvailable || !Notifications) return false;
+  
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    
+    return finalStatus === 'granted';
+  } catch (error) {
+    console.warn('[NotificationService] Failed to request permissions:', error);
+    return false;
+  }
+};
+
 /**
- * Show a completion notification.
+ * Show a completion notification immediately.
  * Silently fails if notifications are unavailable.
  */
 export const showCompletionNotification = async (
@@ -65,12 +92,66 @@ export const showCompletionNotification = async (
         body: isFocusSession
           ? 'Great work! Time for a well-deserved break.'
           : 'Refreshed? Let\'s get back to focusing!',
-        sound: true,
+        sound: 'notification.wav',
       },
-      trigger: null, // Immediate
+      trigger: {
+        channelId: 'focusflow-timer-alerts',
+      } as any, // Immediate
     });
   } catch {
-    // Silently fail — notification is a nice-to-have, not critical
+    // Silently fail
+  }
+};
+
+/**
+ * Schedule a notification for a specific future exact time.
+ */
+export const scheduleExactNotification = async (
+  isFocusSession: boolean,
+  timestampMs: number,
+  isFinalCompletion: boolean = false
+): Promise<void> => {
+  if (!notificationsAvailable || !Notifications) return;
+  
+  try {
+    let title = isFocusSession ? 'Focus Session Complete! 🎯' : 'Break Over! ⏰';
+    let body = isFocusSession
+      ? 'Great work! Time for a well-deserved break.'
+      : 'Refreshed? Let\'s get back to focusing!';
+
+    if (isFinalCompletion) {
+      title = 'All Cycles Completed! 🎉';
+      body = 'Incredible focus! You finished all your cycles.';
+    }
+
+    const secondsFromNow = Math.max(1, Math.round((timestampMs - Date.now()) / 1000));
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        sound: 'notification.wav',
+      },
+      trigger: { 
+        seconds: secondsFromNow,
+        channelId: 'focusflow-timer-alerts',
+      } as any,
+    });
+  } catch {
+    // Silently fail
+  }
+};
+
+/**
+ * Cancel all previously scheduled notifications.
+ */
+export const cancelAllNotifications = async (): Promise<void> => {
+  if (!notificationsAvailable || !Notifications) return;
+  
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+  } catch {
+    // Silently fail
   }
 };
 

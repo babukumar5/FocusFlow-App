@@ -28,6 +28,7 @@ import { formatTime } from '@/src/utils/formatTime';
 import { haptics } from '@/src/utils/haptics';
 import { AnimatedPressable } from '@/src/components/common/AnimatedPressable';
 import { useScreenTransition } from '@/src/utils/animations';
+import { requestNotificationPermissions } from '@/src/services/notificationService';
 
 const { width } = Dimensions.get('window');
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -95,6 +96,10 @@ export default function TimerHomeScreen() {
     };
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     syncBackgroundTime();
+    
+    // Request permissions for existing users
+    requestNotificationPermissions();
+    
     return () => subscription.remove();
   }, []);
 
