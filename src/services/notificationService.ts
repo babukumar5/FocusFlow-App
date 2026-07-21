@@ -2,14 +2,14 @@
  * FocusFlow — Notification Service
  *
  * Architecture:
- * - The timer engine is the single source of truth for notifications.
- * - This module is a thin wrapper around expo-notifications.
- * - It never decides WHEN to fire — the timer engine tells it.
+ * - The timer engine is the single source of truth for notification events.
+ * - This module serializes native scheduling and rejects obsolete requests.
+ * - It never decides which timer milestone should be announced.
  *
  * Safety:
  * - Detects Expo Go and silently disables notifications.
  * - Never throws errors — all failures are silently handled.
- * - Supports Expo SDK 53.
+ * - Supports Expo SDK 57.
  */
 
 import Constants from 'expo-constants';
@@ -20,6 +20,40 @@ let notificationsAvailable = false;
 
 // Channel ID — v2 uses the user's system default notification sound
 const CHANNEL_ID = 'focusflow-alerts-v2';
+
+export type NotificationType = 'START_FOCUS' | 'CYCLE_COMPLETE' | 'ALL_COMPLETED';
+export type NotificationOperation = number;
+
+// Every replacement or cancellation advances this value. Work queued by an
+// older operation becomes a no-op, preventing stale async calls from adding a
+// notification after a newer timer action has replaced or cancelled it.
+let currentOperation = 0;
+let pendingNotificationId: string | null = null;
+let nativeQueue: Promise<void> = Promise.resolve();
+
+export const beginNotificationOperation = (): NotificationOperation => {
+  currentOperation += 1;
+  return currentOperation;
+};
+
+export const isNotificationOperationCurrent = (
+  operation: NotificationOperation,
+): boolean => operation === currentOperation;
+
+const enqueueNativeOperation = (
+  operation: NotificationOperation,
+  work: () => Promise<void>,
+): Promise<void> => {
+  const queued = nativeQueue.then(async () => {
+    if (!isNotificationOperationCurrent(operation)) return;
+    await work();
+  });
+
+  // Keep the queue usable after a native failure. Individual operations remain
+  // intentionally best-effort and never surface errors to timer callers.
+  nativeQueue = queued.catch(() => {});
+  return queued.catch(() => {});
+};
 
 /**
  * Initialize notification service.
@@ -84,95 +118,106 @@ export const requestNotificationPermissions = async (): Promise<boolean> => {
   }
 };
 
-export type NotificationType = 'START_FOCUS' | 'FOCUS_END' | 'CYCLE_COMPLETE' | 'ALL_COMPLETED';
-
 /**
- * Schedule a notification.
+ * Schedule one timer milestone notification.
  *
  * @param type        — The notification event type.
  * @param timestampMs — 0 = fire immediately. >0 = schedule for that exact UNIX timestamp.
  * @param cycleData   — Required for CYCLE_COMPLETE.
+ * @param operation   — The active timer notification operation.
  */
 export const scheduleExactNotification = async (
   type: NotificationType,
   timestampMs: number,
-  cycleData?: { completed: number; total: number }
+  cycleData?: { completed: number },
+  operation: NotificationOperation = beginNotificationOperation(),
 ): Promise<void> => {
-  if (!notificationsAvailable || !Notifications) return;
+  await enqueueNativeOperation(operation, async () => {
+    if (!notificationsAvailable || !Notifications) return;
 
-  try {
     let title = '';
     let body = '';
 
     switch (type) {
       case 'START_FOCUS':
         title = "🚀 Let's Begin!";
-        body = 'Stay focused. Your session has started.';
-        break;
-      case 'FOCUS_END':
-        title = '⏰ Focus Complete!';
-        body = 'Time for a break.';
+        body = 'Your focus session has started.\nStay focused!';
         break;
       case 'CYCLE_COMPLETE':
-        if (cycleData?.completed === 1) {
-          title = '✅ 1 Cycle Completed!';
-          body = "Great job! Let's begin the next focus session.";
-        } else if (cycleData?.completed === 2) {
-          title = '🏆 2 Cycles Completed!';
-          body = "Amazing! Let's begin the next focus session.";
-        } else if (cycleData?.completed === 3) {
-          title = '🔥 3 Cycles Completed!';
-          body = "Excellent! Let's begin the next focus session.";
-        } else {
-          title = `✅ ${cycleData?.completed} Cycles Completed!`;
-          body = "Great job! Let's begin the next focus session.";
-        }
+        title = `✅ Cycle ${cycleData?.completed} Completed!`;
+        body = 'Great job!\nKeep going.';
         break;
       case 'ALL_COMPLETED':
-        title = '🎉 All Cycles Completed!';
-        body = 'Amazing work! You completed every focus cycle.';
+        title = '🎉 Well Done!';
+        body = 'All your focus cycles are completed.\nTake a longer break and recharge.';
         break;
     }
 
-    let triggerObj: any = null;
+    try {
+      if (timestampMs <= 0) {
+        // Session start is delivered immediately and is not tracked as a
+        // future pending milestone.
+        const identifier = await Notifications.scheduleNotificationAsync({
+          content: { title, body, sound: 'default' },
+          trigger: { channelId: CHANNEL_ID },
+        });
 
-    if (timestampMs > 0) {
-      // Schedule for an exact future time. Clamp to at least 1s from now.
-      const triggerDate = new Date(Math.max(Date.now() + 1000, timestampMs));
-      triggerObj = {
-        type: 'date',
-        date: triggerDate,
-        channelId: CHANNEL_ID,
-      };
-    } else {
-      // Fire immediately
-      triggerObj = { channelId: CHANNEL_ID };
+        if (!isNotificationOperationCurrent(operation)) {
+          await Notifications.cancelScheduledNotificationAsync(identifier);
+        }
+        return;
+      }
+
+      // The service maintains at most one future timer milestone. Replacing a
+      // future notification within the same operation is safe and targeted.
+      if (pendingNotificationId) {
+        await Notifications.cancelScheduledNotificationAsync(pendingNotificationId);
+        pendingNotificationId = null;
+      }
+
+      if (!isNotificationOperationCurrent(operation)) return;
+
+      const identifier = await Notifications.scheduleNotificationAsync({
+        content: { title, body, sound: 'default' },
+        trigger: {
+          type: 'date',
+          date: new Date(Math.max(Date.now() + 1000, timestampMs)),
+          channelId: CHANNEL_ID,
+        } as any,
+      });
+
+      if (!isNotificationOperationCurrent(operation)) {
+        await Notifications.cancelScheduledNotificationAsync(identifier);
+        return;
+      }
+
+      pendingNotificationId = identifier;
+    } catch {
+      // Silently fail. The timer remains authoritative when notifications are
+      // unavailable or rejected by the operating system.
+      pendingNotificationId = null;
     }
-
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        sound: 'default', // OS-managed notification sound
-      },
-      trigger: triggerObj,
-    });
-  } catch {
-    // Silently fail
-  }
+  });
 };
 
 /**
- * Cancel all previously scheduled notifications.
+ * Invalidate every pending timer notification. Calls without an operation are
+ * external cancellations (pause/reset/etc.) and therefore start a new one.
  */
-export const cancelAllNotifications = async (): Promise<void> => {
-  if (!notificationsAvailable || !Notifications) return;
+export const cancelAllNotifications = async (
+  operation: NotificationOperation = beginNotificationOperation(),
+): Promise<void> => {
+  await enqueueNativeOperation(operation, async () => {
+    pendingNotificationId = null;
 
-  try {
-    await Notifications.cancelAllScheduledNotificationsAsync();
-  } catch {
-    // Silently fail
-  }
+    if (!notificationsAvailable || !Notifications) return;
+
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+    } catch {
+      // Silently fail. A future replacement will still use its current token.
+    }
+  });
 };
 
 /**

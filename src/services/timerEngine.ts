@@ -1,7 +1,13 @@
 import { TimerMode, FocusSession, SessionMode } from '../types/timer.types';
 import { useSettingsStore } from '../store/settingsStore';
 import { haptics } from '../utils/haptics';
-import { scheduleExactNotification, cancelAllNotifications, NotificationType } from './notificationService';
+import {
+  beginNotificationOperation,
+  cancelAllNotifications,
+  isNotificationOperationCurrent,
+  NotificationType,
+  scheduleExactNotification,
+} from './notificationService';
 import { getLocalDateString, getISOWeekNumber, getDayName, getMonthName } from '../utils/dateUtils';
 import { insertSession, getCompletedSessions } from './db';
 import { useActivityStore } from '../store/activityStore';
@@ -55,53 +61,55 @@ export class TimerEngine {
     }
   }
 
-  // ─── Notification management (single source of truth) ─────────────────────────
+  // ─── Notification management ─────────────────────────────────────────────────
   //
-  // This is the ONLY method that schedules notifications.
-  // It guarantees:
-  //   1. All existing notifications are cancelled FIRST.
-  //   2. After cancel completes, state is re-read to avoid stale data.
-  //   3. If the timer is no longer running (user paused/reset during the await),
-  //      nothing is scheduled — eliminating race conditions.
-  //   4. At most ONE immediate + ONE future notification are scheduled.
-  //
+  // This is the only timer-side scheduling boundary. It maps the current timer
+  // phase to the next meaningful milestone: session start, cycle completion,
+  // or final completion. The notification service serializes native calls.
 
   private async replaceNotifications(
     targetEndTimeMs: number,
     immediate?: NotificationType
   ) {
-    // Step 1: Cancel everything in the OS queue
-    await cancelAllNotifications();
+    const operation = beginNotificationOperation();
 
-    // Step 2: Re-read state AFTER the await to catch any changes
-    if (!this.store) return;
+    // Cancel first, then validate both the operation and the absolute timer
+    // target. A pause, reset, resume, or newer sync invalidates this request.
+    await cancelAllNotifications(operation);
+
+    if (!isNotificationOperationCurrent(operation) || !this.store) return;
     const state = this.store.get();
 
-    // Step 3: If the timer was paused/reset/stopped while we were awaiting, bail out
-    if (state.status !== 'running') return;
+    if (
+      state.status !== 'running' ||
+      state.targetEndTime !== targetEndTimeMs
+    ) return;
 
     const settings = useSettingsStore.getState().settings;
     if (!settings.browserNotifications) return;
 
-    // Step 4: Fire the immediate notification (e.g. "Let's Begin!")
+    // A new Focus session announces its start once. Resume and automatic phase
+    // transitions omit this argument and therefore remain silent.
     if (immediate) {
-      await scheduleExactNotification(immediate, 0);
+      await scheduleExactNotification(immediate, 0, undefined, operation);
+      if (!isNotificationOperationCurrent(operation)) return;
     }
 
-    // Step 5: Schedule exactly ONE future notification for phase completion
-    if (state.mode === 'FOCUS') {
-      await scheduleExactNotification('FOCUS_END', targetEndTimeMs);
+    // The next milestone is always the end of the current cycle. During Focus,
+    // include its following Break so an OS notification can still fire when JS
+    // is suspended. Once Focus transitions to Break in the foreground, this is
+    // replaced with the exact Break end time.
+    const milestoneTime = state.mode === 'FOCUS'
+      ? targetEndTimeMs + this.getDurationForMode('BREAK') * 1000
+      : targetEndTimeMs;
+    const nextCompleted = state.completedPomodoros + 1;
+
+    if (nextCompleted >= settings.cycles) {
+      await scheduleExactNotification('ALL_COMPLETED', milestoneTime, undefined, operation);
     } else {
-      // Break mode — determine which cycle notification to schedule
-      const nextCompleted = state.completedPomodoros + 1;
-      if (nextCompleted >= settings.cycles) {
-        await scheduleExactNotification('ALL_COMPLETED', targetEndTimeMs);
-      } else {
-        await scheduleExactNotification('CYCLE_COMPLETE', targetEndTimeMs, {
-          completed: nextCompleted,
-          total: settings.cycles,
-        });
-      }
+      await scheduleExactNotification('CYCLE_COMPLETE', milestoneTime, {
+        completed: nextCompleted,
+      }, operation);
     }
   }
 
@@ -219,9 +227,8 @@ export class TimerEngine {
       const nextTarget = actualCompletionTime + nextDuration * 1000;
       const remainingForNext = Math.max(0, nextTarget - nowTime);
       this.startTimeout(remainingForNext);
-      // Schedule the completion notification for the NEW phase.
-      // No immediate notification — the OS already delivered the previous
-      // phase's completion notification (FOCUS_END or CYCLE_COMPLETE).
+      // Automatic phase transitions are silent. The notification boundary
+      // replaces only the pending cycle milestone for the new phase.
       this.replaceNotifications(nextTarget);
     }
   }
@@ -257,9 +264,9 @@ export class TimerEngine {
     haptics.lightTap();
     this.startTimeout(durationToUse * 1000);
 
-    // ── AFTER transition: schedule notifications ──────────────────────────────
-    // For Focus: immediate "Let's Begin!" + future "Focus Complete!"
-    // For Break (manual start, if ever): only future completion notification
+    // ── AFTER transition: schedule notification milestones ────────────────────
+    // Focus begins with one immediate start message plus one pending cycle-end
+    // milestone. Break starts do not announce themselves.
     this.replaceNotifications(
       targetEndTime,
       mode === 'FOCUS' ? 'START_FOCUS' : undefined
