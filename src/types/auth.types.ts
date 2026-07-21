@@ -7,13 +7,10 @@ export interface UserSettings {
   shortBreakTime: number;
   longBreakTime: number;
   theme: 'light' | 'dark';
-  soundType: string;
-  soundVolume: number;
   browserNotifications: boolean;
   autoStartBreaks: boolean;
   hasCompletedOnboarding: boolean;
   cycles: number;
-  timerSoundEnabled: boolean;
   backgroundMusic: string;
   language: string;
 }

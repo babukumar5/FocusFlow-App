@@ -74,9 +74,6 @@ const validateSettings = (
     const { min, max, step } = SETTINGS_LIMITS.cycles;
     merged.cycles = clampAndStep(merged.cycles, min, max, step);
   }
-  if (patch.soundVolume !== undefined) {
-    merged.soundVolume = Math.max(0, Math.min(1, merged.soundVolume));
-  }
 
   return merged;
 };

@@ -36,12 +36,9 @@ export const initDB = () => {
         -- Additional settings to keep the app working seamlessly
         longBreakTime INTEGER,
         theme TEXT,
-        soundType TEXT,
-        soundVolume REAL,
         browserNotifications INTEGER,
         autoStartBreaks INTEGER,
         hasCompletedOnboarding INTEGER,
-        timerSoundEnabled INTEGER,
         backgroundMusic TEXT,
         language TEXT
       );
@@ -64,9 +61,9 @@ export const initDB = () => {
       db.runSync(`
         INSERT INTO Settings (
           id, focusDuration, breakDuration, cycles, notificationsEnabled, amoledMode, autoStartFocus,
-          longBreakTime, theme, soundType, soundVolume, browserNotifications, autoStartBreaks,
-          hasCompletedOnboarding, timerSoundEnabled, backgroundMusic, language
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          longBreakTime, theme, browserNotifications, autoStartBreaks,
+          hasCompletedOnboarding, backgroundMusic, language
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         1, 
         defaultSettings.focusTime, 
@@ -77,12 +74,9 @@ export const initDB = () => {
         0,
         defaultSettings.longBreakTime,
         defaultSettings.theme,
-        defaultSettings.soundType,
-        defaultSettings.soundVolume,
         defaultSettings.browserNotifications ? 1 : 0,
         defaultSettings.autoStartBreaks ? 1 : 0,
         defaultSettings.hasCompletedOnboarding ? 1 : 0,
-        defaultSettings.timerSoundEnabled ? 1 : 0,
         defaultSettings.backgroundMusic,
         defaultSettings.language
       ]);
@@ -139,12 +133,9 @@ export const getSettings = (): UserSettings => {
       longBreakTime: row.longBreakTime ?? defaultSettings.longBreakTime,
       cycles: row.cycles ?? defaultSettings.cycles,
       theme: row.theme || defaultSettings.theme,
-      soundType: row.soundType ?? defaultSettings.soundType,
-      soundVolume: row.soundVolume ?? defaultSettings.soundVolume,
       browserNotifications: row.browserNotifications === 1,
       autoStartBreaks: row.autoStartBreaks === 1,
       hasCompletedOnboarding: row.hasCompletedOnboarding === 1,
-      timerSoundEnabled: row.timerSoundEnabled === 1,
       backgroundMusic: row.backgroundMusic ?? defaultSettings.backgroundMusic,
       language: row.language ?? defaultSettings.language,
     };
@@ -171,12 +162,9 @@ export const updateSettings = (settings: Partial<UserSettings>) => {
         autoStartFocus = ?,
         longBreakTime = ?,
         theme = ?,
-        soundType = ?,
-        soundVolume = ?,
         browserNotifications = ?,
         autoStartBreaks = ?,
         hasCompletedOnboarding = ?,
-        timerSoundEnabled = ?,
         backgroundMusic = ?,
         language = ?
       WHERE id = 1
@@ -189,12 +177,9 @@ export const updateSettings = (settings: Partial<UserSettings>) => {
       0,
       merged.longBreakTime,
       merged.theme,
-      merged.soundType,
-      merged.soundVolume,
       merged.browserNotifications ? 1 : 0,
       merged.autoStartBreaks ? 1 : 0,
       merged.hasCompletedOnboarding ? 1 : 0,
-      merged.timerSoundEnabled ? 1 : 0,
       merged.backgroundMusic,
       merged.language
     ]);

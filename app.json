@@ -43,13 +43,11 @@
       ],
       "expo-secure-store",
       "expo-sqlite",
-      "expo-audio",
       [
         "expo-notifications",
         {
           "icon": "./assets/images/icon.png",
-          "color": "#020B2E",
-          "sounds": ["./assets/audio/notification.wav"]
+          "color": "#020B2E"
         }
       ]
     ],

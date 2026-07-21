@@ -1,8 +1,7 @@
 import { TimerMode, TimerStatus, FocusSession, SessionMode } from '../types/timer.types';
 import { useSettingsStore } from '../store/settingsStore';
 import { haptics } from '../utils/haptics';
-import { soundService } from './soundService';
-import { scheduleExactNotification, cancelAllNotifications } from './notificationService';
+import { scheduleExactNotification, cancelAllNotifications, NotificationType } from './notificationService';
 import { getLocalDateString, getISOWeekNumber, getDayName, getMonthName } from '../utils/dateUtils';
 import { insertSession, getCompletedSessions } from './db';
 import { useActivityStore } from '../store/activityStore';
@@ -17,13 +16,14 @@ export class TimerEngine {
   private timeoutId: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
-    // Pre-load sounds to prevent any delay on first playback
-    soundService.init();
+    // No custom sound initialization — all sounds come from OS notifications
   }
 
   bindStore(store: StoreProxy) {
     this.store = store;
   }
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────────
 
   private getDurationForMode(mode: TimerMode): number {
     const settings = useSettingsStore.getState().settings;
@@ -35,11 +35,11 @@ export class TimerEngine {
     }
   }
 
-
-
   private generateSessionId(): string {
     return `session-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
   }
+
+  // ─── Timeout management ───────────────────────────────────────────────────────
 
   private startTimeout(remainingMs: number) {
     this.stopTimeout();
@@ -55,28 +55,63 @@ export class TimerEngine {
     }
   }
 
-  private scheduleNextNotification(remainingMs: number) {
+  // ─── Notification management (single source of truth) ─────────────────────────
+  //
+  // This is the ONLY method that schedules notifications.
+  // It guarantees:
+  //   1. All existing notifications are cancelled FIRST.
+  //   2. After cancel completes, state is re-read to avoid stale data.
+  //   3. If the timer is no longer running (user paused/reset during the await),
+  //      nothing is scheduled — eliminating race conditions.
+  //   4. At most ONE immediate + ONE future notification are scheduled.
+  //
+
+  private async replaceNotifications(
+    targetEndTimeMs: number,
+    immediate?: NotificationType
+  ) {
+    // Step 1: Cancel everything in the OS queue
+    await cancelAllNotifications();
+
+    // Step 2: Re-read state AFTER the await to catch any changes
     if (!this.store) return;
     const state = this.store.get();
+
+    // Step 3: If the timer was paused/reset/stopped while we were awaiting, bail out
+    if (state.status !== 'running') return;
+
     const settings = useSettingsStore.getState().settings;
-    
-    cancelAllNotifications();
     if (!settings.browserNotifications) return;
 
-    const nextEventTime = Date.now() + remainingMs;
-    const currentMode = state.mode;
-    
-    if (currentMode === 'FOCUS') {
-      scheduleExactNotification('FOCUS_END', nextEventTime);
+    // Step 4: Fire the immediate notification (e.g. "Let's Begin!")
+    if (immediate) {
+      await scheduleExactNotification(immediate, 0);
+    }
+
+    // Step 5: Schedule exactly ONE future notification for phase completion
+    if (state.mode === 'FOCUS') {
+      await scheduleExactNotification('FOCUS_END', targetEndTimeMs);
     } else {
+      // Break mode — determine which cycle notification to schedule
       const nextCompleted = state.completedPomodoros + 1;
       if (nextCompleted >= settings.cycles) {
-        scheduleExactNotification('ALL_COMPLETED', nextEventTime);
+        await scheduleExactNotification('ALL_COMPLETED', targetEndTimeMs);
       } else {
-        scheduleExactNotification('CYCLE_COMPLETE', nextEventTime, { completed: nextCompleted, total: settings.cycles });
+        await scheduleExactNotification('CYCLE_COMPLETE', targetEndTimeMs, {
+          completed: nextCompleted,
+          total: settings.cycles,
+        });
       }
     }
   }
+
+  // ─── State transition handler ─────────────────────────────────────────────────
+  //
+  // Called when a timer phase reaches 00:00.
+  // This is where ALL auto-transitions happen.
+  //
+  // Rule: State transition FIRST, then notification scheduling.
+  //
 
   private handleComplete(historicalCompletionTimeMs?: number, isCatchUp: boolean = false) {
     if (!this.store) return;
@@ -87,66 +122,65 @@ export class TimerEngine {
       mode,
       completedPomodoros,
       sessionStartTime,
-      totalDuration,
       lastCompletedSessionId,
-      sessions,
     } = state;
 
     const settings = useSettingsStore.getState().settings;
-    
+
     if (!isCatchUp) {
       haptics.success();
-      if (!settings.browserNotifications) {
-        soundService.play('completed');
-      }
     }
 
-    let newSession: FocusSession | null = null;
-    let nextCompletedPomodoros = completedPomodoros;
+    // ── Build session record ──────────────────────────────────────────────────
 
     const sessionId = this.generateSessionId();
+    const actualCompletionTime = historicalCompletionTimeMs ?? Date.now();
+    const now = new Date(actualCompletionTime);
+    const durationSecs = this.getDurationForMode(mode);
+    const startTime = sessionStartTime
+      ? new Date(sessionStartTime)
+      : new Date(now.getTime() - durationSecs * 1000);
 
-      const actualCompletionTime = historicalCompletionTimeMs ?? Date.now();
-      const now = new Date(actualCompletionTime);
-      const durationSecs = this.getDurationForMode(mode);
-      const startTime = sessionStartTime
-        ? new Date(sessionStartTime)
-        : new Date(now.getTime() - durationSecs * 1000);
+    const newSession: FocusSession = {
+      _id: sessionId,
+      user: 'local-user',
+      duration: Math.round(durationSecs / 60),
+      actualCompletedMinutes: Math.round(durationSecs / 60),
+      startTime: startTime.toISOString(),
+      endTime: now.toISOString(),
+      date: getLocalDateString(startTime),
+      day: getDayName(startTime),
+      week: getISOWeekNumber(startTime),
+      month: getMonthName(startTime),
+      year: startTime.getFullYear(),
+      mode: mode === 'LONG_BREAK' ? 'long break' : (mode.toLowerCase() as SessionMode),
+      completionStatus: 'completed',
+      interrupted: false,
+      task: null,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    };
 
-      newSession = {
-        _id: sessionId,
-        user: 'local-user',
-        duration: Math.round(durationSecs / 60),
-        actualCompletedMinutes: Math.round(durationSecs / 60),
-        startTime: startTime.toISOString(),
-        endTime: now.toISOString(),
-        date: getLocalDateString(startTime),
-        day: getDayName(startTime),
-        week: getISOWeekNumber(startTime),
-        month: getMonthName(startTime),
-        year: startTime.getFullYear(),
-        mode: mode === 'LONG_BREAK' ? 'long break' : (mode.toLowerCase() as SessionMode),
-        completionStatus: 'completed',
-        interrupted: false,
-        task: null,
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-      };
+    // ── Determine next state ──────────────────────────────────────────────────
 
     let nextMode: TimerMode = mode;
+    let nextCompletedPomodoros = completedPomodoros;
     let autoStart = false;
 
     if (mode === 'FOCUS') {
+      // Focus finished → always auto-start Break
       nextMode = 'BREAK';
-      // Do not auto-start in the background natively. Respect settings for foreground.
-      autoStart = settings.autoStartBreaks;
+      autoStart = true;
     } else {
+      // Break finished → increment cycle count
       nextCompletedPomodoros = completedPomodoros + 1;
-      
+
       if (nextCompletedPomodoros < settings.cycles) {
+        // More cycles to go → auto-start next Focus
         nextMode = 'FOCUS';
-        autoStart = settings.autoStartBreaks;
+        autoStart = true;
       } else {
+        // All cycles complete → stop
         nextMode = 'FOCUS';
         autoStart = false;
       }
@@ -154,12 +188,15 @@ export class TimerEngine {
 
     const nextDuration = this.getDurationForMode(nextMode);
 
-    if (newSession && mode === 'FOCUS') {
+    // ── Persist session ───────────────────────────────────────────────────────
+
+    if (mode === 'FOCUS') {
       insertSession(newSession);
     }
-    
-    // Always use accurate SQLite sessions
+
     const updatedSessions = getCompletedSessions();
+
+    // ── STATE TRANSITION (the single source of truth) ─────────────────────────
 
     this.store.set({
       mode: nextMode,
@@ -170,34 +207,44 @@ export class TimerEngine {
       targetEndTime: autoStart ? actualCompletionTime + nextDuration * 1000 : null,
       completedPomodoros: nextCompletedPomodoros,
       sessions: updatedSessions,
-      lastCompletedSessionId: newSession ? newSession._id : lastCompletedSessionId,
+      lastCompletedSessionId: newSession._id,
     });
 
-    // Update Activity system automatically
+    // Update Activity system
     useActivityStore.getState().refresh();
+
+    // ── AFTER transition: schedule timer + notification for next phase ────────
 
     if (autoStart && !isCatchUp) {
       const nowTime = Date.now();
       const nextTarget = actualCompletionTime + nextDuration * 1000;
-      this.startTimeout(Math.max(0, nextTarget - nowTime));
+      const remainingForNext = Math.max(0, nextTarget - nowTime);
+      this.startTimeout(remainingForNext);
+      // Schedule the completion notification for the NEW phase.
+      // No immediate notification — the OS already delivered the previous
+      // phase's completion notification (FOCUS_END or CYCLE_COMPLETE).
+      this.replaceNotifications(nextTarget);
     }
   }
+
+  // ─── Public API ───────────────────────────────────────────────────────────────
 
   start() {
     if (!this.store) return;
     const { remainingTime, mode, completedPomodoros } = this.store.get();
     const settings = useSettingsStore.getState().settings;
-    
+
     let nextCompleted = completedPomodoros;
     if (mode === 'FOCUS' && completedPomodoros >= settings.cycles) {
       nextCompleted = 0;
     }
-    
-    // Always fetch fresh duration from settings just in case remainingTime was stale
+
     const freshDuration = this.getDurationForMode(mode);
     const durationToUse = remainingTime > 0 ? remainingTime : freshDuration;
     const now = Date.now();
     const targetEndTime = now + durationToUse * 1000;
+
+    // ── STATE TRANSITION ──────────────────────────────────────────────────────
 
     this.store.set({
       status: 'running',
@@ -209,14 +256,15 @@ export class TimerEngine {
     });
 
     haptics.lightTap();
-    soundService.play('start');
     this.startTimeout(durationToUse * 1000);
-    this.scheduleNextNotification(durationToUse * 1000);
-    
-    // Immediate notification for starting Focus
-    if (mode === 'FOCUS' && remainingTime === freshDuration && settings.browserNotifications) {
-      scheduleExactNotification('START_FOCUS', 0);
-    }
+
+    // ── AFTER transition: schedule notifications ──────────────────────────────
+    // For Focus: immediate "Let's Begin!" + future "Focus Complete!"
+    // For Break (manual start, if ever): only future completion notification
+    this.replaceNotifications(
+      targetEndTime,
+      mode === 'FOCUS' ? 'START_FOCUS' : undefined
+    );
   }
 
   pause() {
@@ -224,6 +272,7 @@ export class TimerEngine {
     const { status, targetEndTime } = this.store.get();
     if (status !== 'running' || targetEndTime === null) return;
 
+    // Stop everything — no notifications, no sounds
     this.stopTimeout();
     cancelAllNotifications();
 
@@ -248,21 +297,29 @@ export class TimerEngine {
 
     const now = Date.now();
     const remainingMs = remainingTime * 1000;
+    const targetEndTime = now + remainingMs;
+
+    // ── STATE TRANSITION ──────────────────────────────────────────────────────
 
     this.store.set({
       status: 'running',
       pauseTime: null,
-      targetEndTime: now + remainingMs,
+      targetEndTime,
     });
 
     haptics.lightTap();
     this.startTimeout(remainingMs);
-    this.scheduleNextNotification(remainingMs);
+
+    // ── AFTER transition: reschedule for remaining time ────────────────────────
+    // No immediate notification — resume is silent
+    this.replaceNotifications(targetEndTime);
   }
 
   reset() {
     if (!this.store) return;
     const { mode } = this.store.get();
+
+    // Cancel everything
     this.stopTimeout();
     cancelAllNotifications();
 
@@ -283,9 +340,11 @@ export class TimerEngine {
   skip() {
     if (!this.store) return;
     const { mode, completedPomodoros } = this.store.get();
+
+    // Cancel everything
     this.stopTimeout();
     cancelAllNotifications();
-    
+
     const settings = useSettingsStore.getState().settings;
 
     let nextMode: TimerMode;
@@ -295,11 +354,7 @@ export class TimerEngine {
       nextMode = 'BREAK';
     } else {
       nextPomodoros = completedPomodoros + 1;
-      if (nextPomodoros < settings.cycles) {
-        nextMode = 'FOCUS';
-      } else {
-        nextMode = 'FOCUS';
-      }
+      nextMode = 'FOCUS';
     }
 
     const nextDuration = this.getDurationForMode(nextMode);
@@ -320,10 +375,8 @@ export class TimerEngine {
   switchMode(newMode: TimerMode) {
     if (!this.store) return;
     const { status } = this.store.get();
-    
-    if (status !== 'idle') {
-      return;
-    }
+
+    if (status !== 'idle') return;
 
     this.stopTimeout();
     cancelAllNotifications();
@@ -342,7 +395,7 @@ export class TimerEngine {
   setDurations(focus: number, shortBreak: number, longBreak: number) {
     if (!this.store) return;
     const { status, mode } = this.store.get();
-    
+
     if (status === 'idle') {
       let currentDuration: number;
       switch (mode) {
@@ -357,30 +410,40 @@ export class TimerEngine {
     }
   }
 
+  // ─── Background sync ─────────────────────────────────────────────────────────
+  //
+  // When the app returns from background, this method catches up on any
+  // phases that completed while the JS thread was suspended.
+  //
+
   syncBackgroundTime() {
     if (!this.store) return;
-    
+
     let state = this.store.get();
-    
+
     if (state.status !== 'running' || state.targetEndTime === null) return;
 
     let now = Date.now();
     let remainingMs = state.targetEndTime - now;
 
     if (remainingMs > 0) {
+      // Timer hasn't expired yet — restart the timeout and ensure notification
       this.startTimeout(remainingMs);
+      this.replaceNotifications(state.targetEndTime);
       return;
     }
 
+    // Timer expired while in background — catch up
     this.stopTimeout();
 
     while (remainingMs <= 0) {
       const historicalCompletionTime = state.targetEndTime;
-      
+
+      // isCatchUp=true: no haptics, no notification scheduling (OS already delivered)
       this.handleComplete(historicalCompletionTime, true);
-      
+
       state = this.store.get();
-      
+
       if (state.status !== 'running' || state.targetEndTime === null) {
         break;
       }
@@ -389,8 +452,12 @@ export class TimerEngine {
       remainingMs = state.targetEndTime - now;
     }
 
+    // After catch-up, if the timer is still running, set up the current phase
     if (state.status === 'running' && state.targetEndTime !== null) {
-      this.startTimeout(remainingMs);
+      const remaining = Math.max(0, state.targetEndTime - Date.now());
+      this.startTimeout(remaining);
+      // Schedule the notification for the CURRENT phase after catching up
+      this.replaceNotifications(state.targetEndTime);
     }
   }
 
@@ -398,8 +465,7 @@ export class TimerEngine {
     if (!this.store) return;
 
     if (state.status === 'running' && state.targetEndTime !== null) {
-      // setTimeout is used here so that handleHydration finishes, Zustand finishes 
-      // its rehydration cycle, and then we sync.
+      // Defer sync to after Zustand finishes its rehydration cycle
       setTimeout(() => {
         this.syncBackgroundTime();
       }, 0);

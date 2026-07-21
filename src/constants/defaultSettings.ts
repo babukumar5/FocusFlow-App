@@ -7,12 +7,9 @@ export const defaultSettings: UserSettings = {
   longBreakTime: SETTINGS_LIMITS.longBreakTime.default,
   cycles: SETTINGS_LIMITS.cycles.default,
   theme: "dark",
-  soundType: "digital_watch",
-  soundVolume: 0.8,
   browserNotifications: true,
   autoStartBreaks: false,
   hasCompletedOnboarding: false,
-  timerSoundEnabled: true,
   backgroundMusic: "None",
   language: "English",
 };
