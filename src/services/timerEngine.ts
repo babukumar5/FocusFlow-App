@@ -1,4 +1,4 @@
-import { TimerMode, TimerStatus, FocusSession, SessionMode } from '../types/timer.types';
+import { TimerMode, FocusSession, SessionMode } from '../types/timer.types';
 import { useSettingsStore } from '../store/settingsStore';
 import { haptics } from '../utils/haptics';
 import { scheduleExactNotification, cancelAllNotifications, NotificationType } from './notificationService';
@@ -122,7 +122,6 @@ export class TimerEngine {
       mode,
       completedPomodoros,
       sessionStartTime,
-      lastCompletedSessionId,
     } = state;
 
     const settings = useSettingsStore.getState().settings;
