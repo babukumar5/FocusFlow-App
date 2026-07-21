@@ -140,6 +140,7 @@ export const scheduleExactNotification = async (
       // Schedule for an exact future time. Clamp to at least 1s from now.
       const triggerDate = new Date(Math.max(Date.now() + 1000, timestampMs));
       triggerObj = {
+        type: 'date',
         date: triggerDate,
         channelId: CHANNEL_ID,
       };
