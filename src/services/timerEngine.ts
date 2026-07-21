@@ -55,7 +55,7 @@ export class TimerEngine {
     }
   }
 
-  private scheduleAllNotifications(initialRemainingMs: number) {
+  private scheduleNextNotification(remainingMs: number) {
     if (!this.store) return;
     const state = this.store.get();
     const settings = useSettingsStore.getState().settings;
@@ -63,39 +63,18 @@ export class TimerEngine {
     cancelAllNotifications();
     if (!settings.browserNotifications) return;
 
-    let nextEventTime = Date.now() + initialRemainingMs;
-    let currentMode = state.mode;
-    let currentCompletedPomodoros = state.completedPomodoros;
-
-    let loopCount = 0;
-    while (loopCount < 50) {
-      loopCount++;
-      let nextMode: TimerMode = currentMode;
-      let nextCompleted = currentCompletedPomodoros;
-      let autoStart = false;
-
-      if (currentMode === 'FOCUS') {
-        nextMode = 'BREAK';
-        autoStart = true;
+    const nextEventTime = Date.now() + remainingMs;
+    const currentMode = state.mode;
+    
+    if (currentMode === 'FOCUS') {
+      scheduleExactNotification('FOCUS_END', nextEventTime);
+    } else {
+      const nextCompleted = state.completedPomodoros + 1;
+      if (nextCompleted >= settings.cycles) {
+        scheduleExactNotification('ALL_COMPLETED', nextEventTime);
       } else {
-        nextCompleted = currentCompletedPomodoros + 1;
-        if (nextCompleted < settings.cycles) {
-          nextMode = 'FOCUS';
-          autoStart = true;
-        } else {
-          nextMode = 'FOCUS';
-          autoStart = false;
-        }
+        scheduleExactNotification('CYCLE_COMPLETE', nextEventTime, { completed: nextCompleted, total: settings.cycles });
       }
-
-      scheduleExactNotification(currentMode === 'FOCUS', nextEventTime, !autoStart);
-
-      if (!autoStart) break;
-
-      const nextDuration = this.getDurationForMode(nextMode);
-      nextEventTime += nextDuration * 1000;
-      currentMode = nextMode;
-      currentCompletedPomodoros = nextCompleted;
     }
   }
 
@@ -158,18 +137,16 @@ export class TimerEngine {
     let autoStart = false;
 
     if (mode === 'FOCUS') {
-      // 1. Focus Completion
       nextMode = 'BREAK';
-      autoStart = true;
+      // Do not auto-start in the background natively. Respect settings for foreground.
+      autoStart = settings.autoStartBreaks;
     } else {
-      // 2. Break Completion
       nextCompletedPomodoros = completedPomodoros + 1;
       
       if (nextCompletedPomodoros < settings.cycles) {
         nextMode = 'FOCUS';
-        autoStart = true;
+        autoStart = settings.autoStartBreaks;
       } else {
-        // Pomodoro Finished
         nextMode = 'FOCUS';
         autoStart = false;
       }
@@ -234,7 +211,12 @@ export class TimerEngine {
     haptics.lightTap();
     soundService.play('start');
     this.startTimeout(durationToUse * 1000);
-    this.scheduleAllNotifications(durationToUse * 1000);
+    this.scheduleNextNotification(durationToUse * 1000);
+    
+    // Immediate notification for starting Focus
+    if (mode === 'FOCUS' && remainingTime === freshDuration && settings.browserNotifications) {
+      scheduleExactNotification('START_FOCUS', 0);
+    }
   }
 
   pause() {
@@ -275,7 +257,7 @@ export class TimerEngine {
 
     haptics.lightTap();
     this.startTimeout(remainingMs);
-    this.scheduleAllNotifications(remainingMs);
+    this.scheduleNextNotification(remainingMs);
   }
 
   reset() {

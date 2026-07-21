@@ -103,28 +103,61 @@ export const showCompletionNotification = async (
   }
 };
 
+export type NotificationType = 'START_FOCUS' | 'FOCUS_END' | 'CYCLE_COMPLETE' | 'ALL_COMPLETED';
+
 /**
  * Schedule a notification for a specific future exact time.
  */
 export const scheduleExactNotification = async (
-  isFocusSession: boolean,
+  type: NotificationType,
   timestampMs: number,
-  isFinalCompletion: boolean = false
+  cycleData?: { completed: number; total: number }
 ): Promise<void> => {
   if (!notificationsAvailable || !Notifications) return;
   
   try {
-    let title = isFocusSession ? 'Focus Session Complete! 🎯' : 'Break Over! ⏰';
-    let body = isFocusSession
-      ? 'Great work! Time for a well-deserved break.'
-      : 'Refreshed? Let\'s get back to focusing!';
+    let title = '';
+    let body = '';
 
-    if (isFinalCompletion) {
-      title = 'All Cycles Completed! 🎉';
-      body = 'Incredible focus! You finished all your cycles.';
+    switch (type) {
+      case 'START_FOCUS':
+        title = "Let's Begin! 🎯";
+        body = "Stay focused.";
+        break;
+      case 'FOCUS_END':
+        title = "Focus Complete! ⏳";
+        body = "Time for a break.";
+        break;
+      case 'CYCLE_COMPLETE':
+        if (cycleData?.completed === 1) {
+          title = "✅ 1 Cycle Completed!";
+          body = "Great job! Keep going!";
+        } else if (cycleData?.completed === 2) {
+          title = "🏆 2 Cycles Completed!";
+          body = "Amazing! Keep going!";
+        } else {
+          title = `✅ ${cycleData?.completed} Cycles Completed!`;
+          body = "Great job! Keep going!";
+        }
+        break;
+      case 'ALL_COMPLETED':
+        title = "🎉 All Cycles Completed!";
+        body = "Incredible focus! You finished all your cycles.";
+        break;
     }
 
-    const secondsFromNow = Math.max(1, Math.round((timestampMs - Date.now()) / 1000));
+    let triggerObj: any = null;
+    
+    if (timestampMs > 0) {
+      // Ensure we don't schedule in the past
+      const secondsFromNow = Math.max(1, Math.round((timestampMs - Date.now()) / 1000));
+      triggerObj = { 
+        seconds: secondsFromNow,
+        channelId: 'focusflow-timer-alerts',
+      };
+    } else {
+      triggerObj = { channelId: 'focusflow-timer-alerts' }; // Immediate
+    }
 
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -132,10 +165,7 @@ export const scheduleExactNotification = async (
         body,
         sound: 'notification.wav',
       },
-      trigger: { 
-        seconds: secondsFromNow,
-        channelId: 'focusflow-timer-alerts',
-      } as any,
+      trigger: triggerObj,
     });
   } catch {
     // Silently fail
