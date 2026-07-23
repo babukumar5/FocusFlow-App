@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "FocusFlow",
-    "slug": "FocusFlow",
+    "slug": "focusflow",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -45,7 +45,9 @@
           "icon": "./assets/images/icon.png",
           "color": "#020B2E"
         }
-      ]
+      ],
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
@@ -53,8 +55,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "098645ef-2a6c-4f9c-a8f2-597edc76d81b"
+        "projectId": "8ec1539c-d2cb-43ea-9782-67601e2bc870"
       }
-    }
+    },
+    "owner": "bk5s-team"
   }
 }
