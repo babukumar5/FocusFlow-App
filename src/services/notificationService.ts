@@ -17,9 +17,13 @@ import Constants from 'expo-constants';
 // Lazy-loaded notification module
 let Notifications: typeof import('expo-notifications') | null = null;
 let notificationsAvailable = false;
+let channelReady: Promise<void> = Promise.resolve();
 
-// Channel ID — v2 uses the user's system default notification sound
-const CHANNEL_ID = 'focusflow-alerts-v2';
+// Channel ID — v3 explicitly sets sound: 'default' so Android uses the
+// system notification sound. v2 was created without an explicit sound
+// property, which led to inconsistent audio on some devices. Android
+// channels are immutable after creation, so bumping the ID is required.
+const CHANNEL_ID = 'focusflow-alerts-v3';
 
 export type NotificationType = 'START_FOCUS' | 'CYCLE_COMPLETE' | 'ALL_COMPLETED';
 export type NotificationOperation = number;
@@ -29,7 +33,13 @@ export type NotificationOperation = number;
 // notification after a newer timer action has replaced or cancelled it.
 let currentOperation = 0;
 let pendingNotificationId: string | null = null;
+let pendingNotificationTimestampMs: number | null = null;
 let nativeQueue: Promise<void> = Promise.resolve();
+
+const NOTIFICATION_DELIVERY_GRACE_MS = 2_000;
+
+const delay = (milliseconds: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 export const beginNotificationOperation = (): NotificationOperation => {
   currentOperation += 1;
@@ -84,14 +94,15 @@ export const initNotifications = async (): Promise<void> => {
         }),
       });
 
-      // Android notification channel — NO custom sound.
-      // Uses the user's selected notification ringtone.
+      // Android notification channel — uses the system default notification
+      // sound. The explicit `sound: 'default'` is required; omitting it can
+      // cause silent notifications on some OEMs / Android versions.
       if (typeof Notifications.setNotificationChannelAsync === 'function') {
-        Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+        channelReady = Notifications.setNotificationChannelAsync(CHANNEL_ID, {
           name: 'FocusFlow Alerts',
           importance: (Notifications as any).AndroidImportance?.HIGH,
-          // Intentionally omitting `sound` — Android uses the user's default
-        }).catch(() => {});
+          sound: 'default',
+        }).then(() => undefined).catch(() => undefined);
       }
     }
   } catch {
@@ -135,6 +146,9 @@ export const scheduleExactNotification = async (
   await enqueueNativeOperation(operation, async () => {
     if (!notificationsAvailable || !Notifications) return;
 
+    // Do not schedule against the channel before Android has created it.
+    await channelReady;
+
     let title = '';
     let body = '';
 
@@ -168,11 +182,17 @@ export const scheduleExactNotification = async (
         return;
       }
 
+      const scheduledTimestampMs = Math.max(Date.now() + 1000, timestampMs);
+
       // The service maintains at most one future timer milestone. Replacing a
       // future notification within the same operation is safe and targeted.
       if (pendingNotificationId) {
+        await waitForDueNotificationDelivery(operation);
+        if (!isNotificationOperationCurrent(operation)) return;
+
         await Notifications.cancelScheduledNotificationAsync(pendingNotificationId);
         pendingNotificationId = null;
+        pendingNotificationTimestampMs = null;
       }
 
       if (!isNotificationOperationCurrent(operation)) return;
@@ -181,7 +201,7 @@ export const scheduleExactNotification = async (
         content: { title, body, sound: 'default' },
         trigger: {
           type: 'date',
-          date: new Date(Math.max(Date.now() + 1000, timestampMs)),
+          date: new Date(scheduledTimestampMs),
           channelId: CHANNEL_ID,
         } as any,
       });
@@ -192,30 +212,95 @@ export const scheduleExactNotification = async (
       }
 
       pendingNotificationId = identifier;
+      pendingNotificationTimestampMs = scheduledTimestampMs;
     } catch {
       // Silently fail. The timer remains authoritative when notifications are
       // unavailable or rejected by the operating system.
       pendingNotificationId = null;
+      pendingNotificationTimestampMs = null;
     }
   });
 };
 
 /**
- * Invalidate every pending timer notification. Calls without an operation are
- * external cancellations (pause/reset/etc.) and therefore start a new one.
+ * A Break-end notification and the JS timer callback have the same deadline.
+ * Do not cancel a notification that is already due (or due within the small
+ * delivery grace window); wait until Android removes it from its scheduled
+ * queue instead. This lets the native alarm win the boundary race. A newer
+ * operation (pause/reset/etc.) invalidates the wait immediately.
  */
-export const cancelAllNotifications = async (
-  operation: NotificationOperation = beginNotificationOperation(),
+const waitForDueNotificationDelivery = async (
+  operation: NotificationOperation,
 ): Promise<void> => {
-  await enqueueNativeOperation(operation, async () => {
-    pendingNotificationId = null;
+  if (
+    !Notifications ||
+    typeof Notifications.getAllScheduledNotificationsAsync !== 'function' ||
+    pendingNotificationId === null ||
+    pendingNotificationTimestampMs === null ||
+    pendingNotificationTimestampMs - Date.now() > NOTIFICATION_DELIVERY_GRACE_MS
+  ) {
+    return;
+  }
 
-    if (!notificationsAvailable || !Notifications) return;
+  const notificationId = pendingNotificationId;
+
+  while (isNotificationOperationCurrent(operation)) {
+    const millisecondsUntilDue = pendingNotificationTimestampMs - Date.now();
+    if (millisecondsUntilDue > 0) {
+      await delay(millisecondsUntilDue);
+    }
+
+    if (!isNotificationOperationCurrent(operation)) return;
 
     try {
-      await Notifications.cancelAllScheduledNotificationsAsync();
+      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+      if (!scheduled.some(({ identifier }) => identifier === notificationId)) {
+        return;
+      }
     } catch {
-      // Silently fail. A future replacement will still use its current token.
+      // If the native queue cannot be inspected, leave the notification in
+      // place. It is safer to let the due alarm fire than to cancel it blindly.
+      await delay(100);
+      continue;
+    }
+
+    await delay(100);
+  }
+};
+
+/**
+ * Invalidate the pending timer notification. Calls without an operation are
+ * external cancellations (pause/reset/etc.) and therefore start a new one.
+ *
+ * Uses targeted cancellation (cancelScheduledNotificationAsync) instead of
+ * the blanket cancelAllScheduledNotificationsAsync. This is critical because:
+ *   1. Already-delivered notifications remain in the notification shade.
+ *   2. Cycle notifications that Android's alarm has already fired are not
+ *      wiped during catch-up or phase transitions.
+ */
+export const cancelAllNotifications = async (
+  operation?: NotificationOperation,
+): Promise<void> => {
+  const activeOperation = operation ?? beginNotificationOperation();
+  const isReplacement = operation !== undefined;
+
+  await enqueueNativeOperation(activeOperation, async () => {
+    if (isReplacement) {
+      await waitForDueNotificationDelivery(activeOperation);
+      if (!isNotificationOperationCurrent(activeOperation)) return;
+    }
+
+    const idToCancel = pendingNotificationId;
+    pendingNotificationId = null;
+    pendingNotificationTimestampMs = null;
+
+    if (!notificationsAvailable || !Notifications || !idToCancel) return;
+
+    try {
+      await Notifications.cancelScheduledNotificationAsync(idToCancel);
+    } catch {
+      // Silently fail. The notification may have already been delivered by
+      // Android's alarm — that is the desired outcome.
     }
   });
 };
