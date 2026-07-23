@@ -236,45 +236,18 @@ export const scheduleAllMilestones = async (
 
     if (!isNotificationOperationCurrent(operation)) return;
 
-    const registeredIds: string[] = [];
-
-    for (const milestone of milestones) {
-      // Check the guard before every native call. If a pause, reset, or skip
-      // has started a new operation while we were awaiting a prior
-      // scheduleNotificationAsync, invalidate this batch immediately.
-      if (!isNotificationOperationCurrent(operation)) {
-        // Cancel every alarm already registered in this batch so no ghost
-        // notifications fire from a batch that was abandoned mid-flight.
-        for (const id of registeredIds) {
-          try {
-            await Notifications!.cancelScheduledNotificationAsync(id);
-          } catch {
-            // Alarm may have already fired or never made it to the queue.
-            // Either outcome is acceptable — we are abandoning this batch.
-          }
-        }
-        return;
-      }
-
+    // Dispatch all native calls synchronously in the same JS tick to prevent
+    // partial scheduling if the JS thread is suspended by the OS mid-flight.
+    const promises = milestones.map(async (milestone) => {
       const { title, body } = buildContent(milestone.type, milestone.cycleData);
 
       try {
-        let identifier: string;
-
         if (milestone.timestampMs <= 0) {
-          // START_FOCUS is delivered immediately. A 1-second timeInterval
-          // trigger uses a fully-typed native code path that consistently
-          // resolves the channel sound on Android, unlike a bare object
-          // trigger with no type field.
-          //
-          // FIX: channelId must be in content, not in trigger. Placing it
-          // inside the trigger object is silently ignored by Android —
-          // the notification falls back to the default (silent) channel.
-          identifier = await Notifications!.scheduleNotificationAsync({
+          return await Notifications!.scheduleNotificationAsync({
             content: {
               title,
               body,
-              sound: "default",
+              sound: true,
             },
             trigger: {
               type: "timeInterval",
@@ -284,26 +257,15 @@ export const scheduleAllMilestones = async (
             } as any,
           });
         } else {
-          // Future alarms use an absolute date trigger. expo-notifications maps
-          // this to AlarmManager.setExactAndAllowWhileIdle (when
-          // SCHEDULE_EXACT_ALARM / USE_EXACT_ALARM is held) or
-          // setAndAllowWhileIdle (fallback). Both fire during Doze mode.
-          // Clamp to at least 1 second in the future to avoid the OS
-          // rejecting a timestamp that has already elapsed by the time the
-          // native call is processed.
           const scheduledAt = Math.max(
             Date.now() + 1_000,
             milestone.timestampMs,
           );
-
-          // FIX: channelId must be in content, not in trigger. Placing it
-          // inside the trigger object is silently ignored by Android —
-          // the notification falls back to the default (silent) channel.
-          identifier = await Notifications!.scheduleNotificationAsync({
+          return await Notifications!.scheduleNotificationAsync({
             content: {
               title,
               body,
-              sound: "default",
+              sound: true,
             },
             trigger: {
               type: "date",
@@ -312,27 +274,24 @@ export const scheduleAllMilestones = async (
             } as any,
           });
         }
-
-        registeredIds.push(identifier);
       } catch {
-        // A single alarm failing does not abort the rest of the batch.
-        // The timer engine remains the authoritative source of truth.
-        // Silently continue to the next milestone.
+        // Silently continue
+        return null;
       }
-    }
+    });
+
+    const results = await Promise.all(promises);
+    const registeredIds = results.filter((id): id is string => id !== null);
 
     // Final operation check before committing. A pause/reset that arrived
     // while the last scheduleNotificationAsync was in flight would have
     // advanced currentOperation, and we must not overwrite pendingNotificationIds
     // with a batch that is already stale.
     if (!isNotificationOperationCurrent(operation)) {
-      for (const id of registeredIds) {
-        try {
-          await Notifications!.cancelScheduledNotificationAsync(id);
-        } catch {
-          /* already delivered or never registered */
-        }
-      }
+      const cancelPromises = registeredIds.map(id =>
+        Notifications!.cancelScheduledNotificationAsync(id).catch(() => {})
+      );
+      await Promise.all(cancelPromises);
       return;
     }
 
@@ -370,15 +329,10 @@ export const cancelAllNotifications = async (
     if (!notificationsAvailable || !Notifications || idsToCancel.length === 0)
       return;
 
-    for (const id of idsToCancel) {
-      try {
-        await Notifications!.cancelScheduledNotificationAsync(id);
-      } catch {
-        // Silently ignore. The notification may have already been delivered
-        // by Android's alarm — that is the desired outcome for fired alarms.
-        // We only need to cancel alarms that have not yet fired.
-      }
-    }
+    const promises = idsToCancel.map(id =>
+      Notifications!.cancelScheduledNotificationAsync(id).catch(() => {})
+    );
+    await Promise.all(promises);
   });
 };
 
