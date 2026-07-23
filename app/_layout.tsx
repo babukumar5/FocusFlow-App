@@ -34,8 +34,6 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (loaded || error) {
-      // 1. Initialize SQLite Database
-      initDB();
 
       // 2. Hydrate Zustand stores with SQLite data
       useSettingsStore.getState().hydrate();

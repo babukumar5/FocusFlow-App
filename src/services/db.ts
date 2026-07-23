@@ -8,15 +8,10 @@ let db: SQLite.SQLiteDatabase;
 
 try {
   db = SQLite.openDatabaseSync('focusflow.db');
-} catch (e) {
-  console.error("Failed to open database", e);
-}
-
-// ─── Schema Setup ─────────────────────────────────────────────────────────────
-
-export const initDB = () => {
-  if (!db) return;
-  try {
+  
+  // Synchronously initialize DB schema so it is ready before Zustand persist rehydrates.
+  // This prevents race conditions where timerEngine tries to insert into Sessions before it exists.
+  if (db) {
     db.execSync(`
       CREATE TABLE IF NOT EXISTS User (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,10 +72,15 @@ export const initDB = () => {
         defaultSettings.language
       ]);
     }
-  } catch (error) {
-    console.error("Database initialization failed", error);
   }
-};
+} catch (e) {
+  console.error("Failed to open or initialize database", e);
+}
+
+// ─── Schema Setup ─────────────────────────────────────────────────────────────
+
+// Initialize DB synchronously during module evaluation (done above)
+export const initDB = () => {};
 
 // ─── User Functions ──────────────────────────────────────────────────────────
 

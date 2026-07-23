@@ -38,13 +38,15 @@ export class StatisticsCalculator {
   // Simple caching mechanism
   private static lastSessionsRef: FocusSession[] | null = null;
   private static cachedData: FullActivityData | null = null;
+  private static lastComputeDate: string | null = null;
 
   static computeFullActivityData(sessions: FocusSession[]): FullActivityData {
-    if (this.lastSessionsRef === sessions && this.cachedData) {
+    const now = new Date();
+    const todayStr = getLocalDateString(now);
+
+    if (this.lastSessionsRef === sessions && this.cachedData && this.lastComputeDate === todayStr) {
       return this.cachedData;
     }
-
-    const now = new Date();
     
     // --- Week Graph Data and Week Sessions ---
     const { labels: weekLabels, values: weekValues, dateStrings: weekDateStrings, tooltipLabels: weekTooltipLabels } = this.computeWeekGraphData(now);
@@ -116,6 +118,7 @@ export class StatisticsCalculator {
     };
     
     this.lastSessionsRef = sessions;
+    this.lastComputeDate = todayStr;
     return this.cachedData;
   }
 

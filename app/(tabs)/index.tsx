@@ -101,25 +101,31 @@ export default function TimerHomeScreen() {
     return () => subscription.remove();
   }, []);
 
-  const prevStatusRef = useRef(status);
-  useEffect(() => {
-    if (prevStatusRef.current === 'running' && status === 'idle' && remainingTime <= 1) {
-      haptics.success();
-    }
-    prevStatusRef.current = status;
-  }, [status, remainingTime]);
+
 
   const progressVal = useSharedValue(remainingTime / totalDuration);
   const glowVal = useSharedValue(0.1);
+  
+  const sharedStatus = useSharedValue(status);
+  const sharedTargetEndTime = useSharedValue(targetEndTime);
+  const sharedRemainingTime = useSharedValue(remainingTime);
+  const sharedTotalDuration = useSharedValue(totalDuration);
+
+  useEffect(() => {
+    sharedStatus.value = status;
+    sharedTargetEndTime.value = targetEndTime;
+    sharedRemainingTime.value = remainingTime;
+    sharedTotalDuration.value = totalDuration;
+  }, [status, targetEndTime, remainingTime, totalDuration]);
 
   // Flawless high-performance timestamp-based native UI rendering
   useFrameCallback(() => {
-    if (status === 'running' && targetEndTime) {
+    if (sharedStatus.value === 'running' && sharedTargetEndTime.value) {
       const now = Date.now();
-      const remainingMs = Math.max(0, targetEndTime - now);
-      progressVal.value = remainingMs / (totalDuration * 1000);
+      const remainingMs = Math.max(0, sharedTargetEndTime.value - now);
+      progressVal.value = remainingMs / (sharedTotalDuration.value * 1000);
     } else {
-      progressVal.value = remainingTime / totalDuration;
+      progressVal.value = sharedRemainingTime.value / sharedTotalDuration.value;
     }
   });
 
@@ -156,7 +162,7 @@ export default function TimerHomeScreen() {
   const animatedTextProps = useAnimatedProps(() => {
     // Derive the remaining seconds directly from the smoothly animating progress value.
     // This perfectly insulates the text rendering from JS thread skips/batching.
-    const currentRemaining = Math.ceil(progressVal.value * totalDuration);
+    const currentRemaining = Math.ceil(progressVal.value * sharedTotalDuration.value);
     const m = Math.floor(currentRemaining / 60);
     const s = currentRemaining % 60;
     const text = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
