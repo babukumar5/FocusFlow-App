@@ -9,7 +9,6 @@ import { AnimatedPressable } from '@/src/components/common/AnimatedPressable';
 
 const PRIMARY_BLUE = '#1E90FF';
 
-import { requestNotificationPermissions } from '@/src/services/notificationService';
 
 export default function OnboardingScreen() {
   const [step, setStep] = useState(1);
@@ -20,8 +19,7 @@ export default function OnboardingScreen() {
       setStep(2);
     } else {
       if (!username.trim()) return;
-      // Request notification permissions
-      await requestNotificationPermissions();
+
       // Save user to SQLite
       createUser(username.trim());
       // Force hydrate auth store to reload user

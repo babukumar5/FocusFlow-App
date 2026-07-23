@@ -7,7 +7,6 @@ export interface UserSettings {
   shortBreakTime: number;
   longBreakTime: number;
   theme: 'light' | 'dark';
-  browserNotifications: boolean;
   autoStartBreaks: boolean;
   hasCompletedOnboarding: boolean;
   cycles: number;

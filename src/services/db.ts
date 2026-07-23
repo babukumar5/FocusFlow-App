@@ -29,14 +29,12 @@ export const initDB = () => {
         focusDuration INTEGER,
         breakDuration INTEGER,
         cycles INTEGER,
-        notificationsEnabled INTEGER,
         amoledMode INTEGER,
         autoStartFocus INTEGER,
         
         -- Additional settings to keep the app working seamlessly
         longBreakTime INTEGER,
         theme TEXT,
-        browserNotifications INTEGER,
         autoStartBreaks INTEGER,
         hasCompletedOnboarding INTEGER,
         backgroundMusic TEXT,
@@ -60,21 +58,19 @@ export const initDB = () => {
     if (settingsCount && settingsCount.count === 0) {
       db.runSync(`
         INSERT INTO Settings (
-          id, focusDuration, breakDuration, cycles, notificationsEnabled, amoledMode, autoStartFocus,
-          longBreakTime, theme, browserNotifications, autoStartBreaks,
+          id, focusDuration, breakDuration, cycles, amoledMode, autoStartFocus,
+          longBreakTime, theme, autoStartBreaks,
           hasCompletedOnboarding, backgroundMusic, language
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         1, 
         defaultSettings.focusTime, 
         defaultSettings.shortBreakTime, 
-        defaultSettings.cycles, 
-        0, 
+        defaultSettings.cycles,
         0, 
         0,
         defaultSettings.longBreakTime,
         defaultSettings.theme,
-        defaultSettings.browserNotifications ? 1 : 0,
         defaultSettings.autoStartBreaks ? 1 : 0,
         defaultSettings.hasCompletedOnboarding ? 1 : 0,
         defaultSettings.backgroundMusic,
@@ -133,7 +129,6 @@ export const getSettings = (): UserSettings => {
       longBreakTime: row.longBreakTime ?? defaultSettings.longBreakTime,
       cycles: row.cycles ?? defaultSettings.cycles,
       theme: row.theme || defaultSettings.theme,
-      browserNotifications: row.browserNotifications === 1,
       autoStartBreaks: row.autoStartBreaks === 1,
       hasCompletedOnboarding: row.hasCompletedOnboarding === 1,
       backgroundMusic: row.backgroundMusic ?? defaultSettings.backgroundMusic,
@@ -157,12 +152,10 @@ export const updateSettings = (settings: Partial<UserSettings>) => {
         focusDuration = ?,
         breakDuration = ?,
         cycles = ?,
-        notificationsEnabled = ?,
         amoledMode = ?,
         autoStartFocus = ?,
         longBreakTime = ?,
         theme = ?,
-        browserNotifications = ?,
         autoStartBreaks = ?,
         hasCompletedOnboarding = ?,
         backgroundMusic = ?,
@@ -174,10 +167,8 @@ export const updateSettings = (settings: Partial<UserSettings>) => {
       merged.cycles,
       0,
       0,
-      0,
       merged.longBreakTime,
       merged.theme,
-      merged.browserNotifications ? 1 : 0,
       merged.autoStartBreaks ? 1 : 0,
       merged.hasCompletedOnboarding ? 1 : 0,
       merged.backgroundMusic,

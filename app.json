@@ -16,11 +16,7 @@
         "backgroundColor": "#020B2E",
         "foregroundImage": "./assets/images/icon.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "permissions": [
-        "android.permission.SCHEDULE_EXACT_ALARM",
-        "android.permission.POST_NOTIFICATIONS"
-      ]
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "bundler": "metro",
@@ -39,13 +35,6 @@
       ],
       "expo-secure-store",
       "expo-sqlite",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/images/icon.png",
-          "color": "#020B2E"
-        }
-      ],
       "expo-status-bar",
       "expo-web-browser"
     ],

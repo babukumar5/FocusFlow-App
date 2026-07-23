@@ -7,7 +7,6 @@ export const defaultSettings: UserSettings = {
   longBreakTime: SETTINGS_LIMITS.longBreakTime.default,
   cycles: SETTINGS_LIMITS.cycles.default,
   theme: "dark",
-  browserNotifications: true,
   autoStartBreaks: false,
   hasCompletedOnboarding: false,
   backgroundMusic: "None",

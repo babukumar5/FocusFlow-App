@@ -42,10 +42,7 @@ export default function RootLayout() {
       useAuthStore.getState().hydrate();
       useActivityStore.getState().refresh();
       
-      // Initialize Notification service
-      import('@/src/services/notificationService').then(service => {
-        service.initNotifications();
-      });
+
 
       // 3. Check if user exists for onboarding routing
       const user = getUser();
